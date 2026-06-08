@@ -1,0 +1,175 @@
+# =============================================================================
+# 1Kosmos Partner Portal — .gitignore
+# Covers: Go backend, React/Node frontend, Docker, editors, OS noise
+# =============================================================================
+
+# ── Environment & secrets ─────────────────────────────────────────────────────
+.env
+.env.local
+.env.*.local
+.env.production
+.env.staging
+backend/.env
+!backend/.env.example
+
+# ── Go ────────────────────────────────────────────────────────────────────────
+# Compiled binaries and test output
+/bin/
+/api
+backend/api
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Test binary (built with "go test -c")
+*.test
+
+# Go coverage output
+*.out
+coverage.html
+
+# Go workspace file (local overrides only)
+go.work.sum
+
+# Vendor directory (uncomment if you vendor deps)
+# vendor/
+
+# Air live-reload tmp dir
+tmp/
+
+# Swaggo generated docs (regenerate with `swag init`)
+backend/docs/
+
+# ── Node / Frontend ───────────────────────────────────────────────────────────
+node_modules/
+frontend/node_modules/
+
+# Build output
+frontend/dist/
+frontend/build/
+dist/
+
+# Vite cache
+frontend/.vite/
+.vite/
+
+# TypeScript build info
+*.tsbuildinfo
+frontend/tsconfig.tsbuildinfo
+
+# npm / pnpm / yarn lock artifacts (keep lock files, ignore caches)
+.npm/
+.pnpm-store/
+.yarn/cache
+.yarn/unplugged
+.yarn/build-state.yml
+.yarn/install-state.gz
+.pnp.*
+
+# ESLint cache
+.eslintcache
+
+# Storybook build
+storybook-static/
+
+# ── Docker ────────────────────────────────────────────────────────────────────
+# Don't ignore docker-compose overrides committed intentionally
+docker-compose.override.yml
+
+# ── Database / Migrations ────────────────────────────────────────────────────
+# Local migration state (keep SQL files, ignore runtime state)
+*.dump
+*.sql.gz
+
+# ── Logs ─────────────────────────────────────────────────────────────────────
+*.log
+logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# ── Editor & IDE ──────────────────────────────────────────────────────────────
+# VS Code — keep shared settings, ignore personal overrides
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+!.vscode/launch.json
+!.vscode/tasks.json
+.vscode/*.code-snippets
+
+# JetBrains IDEs
+.idea/
+*.iml
+*.iws
+*.ipr
+out/
+
+# Vim / Neovim
+*.swp
+*.swo
+*~
+.netrwhist
+
+# Emacs
+*#
+.#*
+\#*#
+
+# Sublime Text
+*.sublime-workspace
+*.sublime-project
+
+# ── macOS ─────────────────────────────────────────────────────────────────────
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon
+._*
+.DocumentRevisions-V100
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+.AppleDB
+.AppleDesktop
+Network Trash Folder
+Temporary Items
+.apdisk
+
+# ── Linux ─────────────────────────────────────────────────────────────────────
+.fuse_hidden*
+.directory
+.Trash-*
+.nfs*
+
+# ── Windows ───────────────────────────────────────────────────────────────────
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+Desktop.ini
+$RECYCLE.BIN/
+*.cab
+*.msi
+*.msix
+*.msm
+*.msp
+*.lnk
+
+# ── Test & Coverage ───────────────────────────────────────────────────────────
+coverage/
+.nyc_output/
+*.lcov
+
+# ── Miscellaneous ─────────────────────────────────────────────────────────────
+*.bak
+*.orig
+*.rej
+.cache/
+.temp/
+.tmp/
