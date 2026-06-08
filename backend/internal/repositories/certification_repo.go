@@ -34,7 +34,9 @@ const certSelectCols = `
 	id, title, slug, description, validity_months,
 	passing_score, created_at, updated_at`
 
-func scanCertification(row pgx.Row) (*models.Certification, error) {
+func scanCertification(row interface {
+	Scan(...any) error
+}) (*models.Certification, error) {
 	var c models.Certification
 	err := row.Scan(
 		&c.ID, &c.Title, &c.Slug, &c.Description,
@@ -221,7 +223,9 @@ const assessmentSelectCols = `
 	id, certification_id, user_id, requested_date,
 	status, notes, created_at, updated_at`
 
-func scanAssessment(row pgx.Row) (*models.AssessmentSchedule, error) {
+func scanAssessment(row interface {
+	Scan(...any) error
+}) (*models.AssessmentSchedule, error) {
 	var a models.AssessmentSchedule
 	var userID uuid.UUID
 	err := row.Scan(
@@ -381,7 +385,9 @@ const issuedCertSelectCols = `
 	cert_number, issued_at, expires_at,
 	revoked_at, revoked_by, created_at`
 
-func scanIssuedCert(row pgx.Row) (*models.IssuedCertificate, error) {
+func scanIssuedCert(row interface {
+	Scan(...any) error
+}) (*models.IssuedCertificate, error) {
 	var ic models.IssuedCertificate
 	err := row.Scan(
 		&ic.ID, &ic.CertificationID, &ic.UserID,

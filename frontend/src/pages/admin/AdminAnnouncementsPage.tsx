@@ -1,129 +1,261 @@
 import React, { useState } from 'react';
-import { Plus } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
+import { Plus, Pin, Eye, EyeOff, Pencil, Trash2 } from 'lucide-react';
 import { PageHeader } from '@/components/ui/PageHeader';
-import { DataTable } from '@/components/ui/DataTable';
 import { Button } from '@/components/ui/Button';
-import { StatusBadge } from '@/components/ui/StatusBadge';
 import { Badge } from '@/components/ui/Badge';
-import { Modal } from '@/components/ui/Modal';
-import { Input } from '@/components/ui/Input';
-import { useAnnouncements, useCreateAnnouncement, useDeleteAnnouncement } from '@/hooks/useAnnouncements';
+import { StatusBadge } from '@/components/ui/StatusBadge';
+import { Select } from '@/components/ui/Select';
+import { DataTable, type DataTableColumn } from '@/components/ui/DataTable';
+import { AnnouncementFormModal } from '@/components/announcements/AnnouncementFormModal';
 import { useToast } from '@/components/ui/Toast';
-import type { Announcement } from '@/types';
+import {
+  useAnnouncements,
+  useUpdateAnnouncement,
+  useDeleteAnnouncement,
+} from '@/hooks/useAnnouncements';
+import type { Announcement, AnnouncementType } from '@/types';
+
+// ─── Type badge helper ─────────────────────────────────────────────────────────
+
+const TYPE_VARIANT: Record<AnnouncementType, 'destructive' | 'blue' | 'success' | 'secondary'> = {
+  security_advisory: 'destructive',
+  product_update: 'blue',
+  vendor_news: 'success',
+  general: 'secondary',
+};
+
+const TYPE_LABELS: Record<AnnouncementType, string> = {
+  security_advisory: 'Security Advisory',
+  product_update: 'Product Update',
+  vendor_news: 'Vendor News',
+  general: 'General',
+};
+
+// ─── Page ─────────────────────────────────────────────────────────────────────
+
+const TYPE_FILTER_OPTIONS: { value: AnnouncementType | ''; label: string }[] = [
+  { value: '', label: 'All Types' },
+  { value: 'vendor_news', label: 'Vendor News' },
+  { value: 'product_update', label: 'Product Update' },
+  { value: 'security_advisory', label: 'Security Advisory' },
+  { value: 'general', label: 'General' },
+];
+
+const PAGE_SIZE = 20;
 
 export default function AdminAnnouncementsPage() {
-  const [page, setPage] = useState(1);
-  const [createOpen, setCreateOpen] = useState(false);
-  const [newTitle, setNewTitle] = useState('');
-  const [newBody, setNewBody] = useState('');
-
-  const { data, isLoading } = useAnnouncements({ page, pageSize: 20 });
-  const createAnn = useCreateAnnouncement();
-  const deleteAnn = useDeleteAnnouncement();
   const { success, error: showError } = useToast();
+  const [page, setPage] = useState(1);
+  const [typeFilter, setTypeFilter] = useState<AnnouncementType | ''>('');
+  const [formOpen, setFormOpen] = useState(false);
+  const [editingAnnouncement, setEditingAnnouncement] = useState<Announcement | null>(null);
 
-  const handleCreate = async () => {
-    if (!newTitle.trim()) return;
+  const { data, isLoading } = useAnnouncements({
+    page,
+    pageSize: PAGE_SIZE,
+    type: typeFilter || undefined,
+  });
+
+  const updateMutation = useUpdateAnnouncement();
+  const deleteMutation = useDeleteAnnouncement();
+
+  const handleTogglePublish = async (announcement: Announcement) => {
     try {
-      await createAnn.mutateAsync({ title: newTitle, bodyHtml: newBody, type: 'general', isPinned: false, isPublished: false, createdBy: '' });
-      success('Announcement created', `"${newTitle}" saved as draft.`);
-      setCreateOpen(false);
-      setNewTitle('');
-      setNewBody('');
+      await updateMutation.mutateAsync({
+        id: announcement.id,
+        data: { isPublished: !announcement.isPublished },
+      });
+      success(
+        announcement.isPublished ? 'Unpublished' : 'Published',
+        `"${announcement.title}" is now ${announcement.isPublished ? 'a draft' : 'live'}.`,
+      );
     } catch {
-      showError('Create failed', 'Could not create announcement.');
+      showError('Failed to update announcement');
     }
   };
 
-  const handleDelete = async (id: string, title: string) => {
-    if (!confirm(`Delete "${title}"?`)) return;
+  const handleTogglePin = async (announcement: Announcement) => {
     try {
-      await deleteAnn.mutateAsync(id);
-      success('Announcement deleted');
+      await updateMutation.mutateAsync({
+        id: announcement.id,
+        data: { isPinned: !announcement.isPinned },
+      });
+      success(
+        announcement.isPinned ? 'Unpinned' : 'Pinned',
+        `"${announcement.title}" has been ${announcement.isPinned ? 'unpinned' : 'pinned'}.`,
+      );
     } catch {
-      showError('Delete failed', 'Unable to delete this announcement.');
+      showError('Failed to update pin status');
     }
   };
 
-  const columns = [
+  const handleDelete = async (announcement: Announcement) => {
+    if (!confirm(`Delete "${announcement.title}"? This cannot be undone.`)) return;
+    try {
+      await deleteMutation.mutateAsync(announcement.id);
+      success('Deleted', 'Announcement has been deleted.');
+    } catch {
+      showError('Failed to delete announcement');
+    }
+  };
+
+  const handleEdit = (announcement: Announcement) => {
+    setEditingAnnouncement(announcement);
+    setFormOpen(true);
+  };
+
+  const announcements = data?.data ?? [];
+  const total = data?.total ?? 0;
+
+  const columns: DataTableColumn<Announcement>[] = [
     {
       key: 'title',
       header: 'Title',
-      cell: (row: Announcement) => (
-        <div>
-          <p className="font-medium text-gray-900 dark:text-white">{row.title}</p>
-          {row.isPinned && <span className="text-xs text-brand-600 dark:text-brand-400">Pinned</span>}
+      cell: (row) => (
+        <div className="min-w-0">
+          <div className="flex items-center gap-2 mb-0.5">
+            {row.isPinned && <Pin className="h-3.5 w-3.5 text-amber-500 shrink-0" />}
+            <p className="font-medium text-gray-900 dark:text-white text-sm truncate max-w-xs">
+              {row.title}
+            </p>
+          </div>
+          <p className="text-xs text-gray-500 dark:text-gray-400 line-clamp-1">
+            {row.bodyHtml.replace(/<[^>]*>/g, ' ').trim().slice(0, 80)}…
+          </p>
         </div>
       ),
     },
     {
       key: 'type',
       header: 'Type',
-      cell: (row: Announcement) => <StatusBadge status={row.type} />,
+      cell: (row) => (
+        <Badge variant={TYPE_VARIANT[row.type] ?? 'secondary'}>
+          {TYPE_LABELS[row.type] ?? row.type}
+        </Badge>
+      ),
     },
     {
-      key: 'isPublished',
+      key: 'pinned',
+      header: 'Pinned',
+      cell: (row) => (
+        <Button
+          variant="ghost"
+          size="icon"
+          className={`h-7 w-7 ${row.isPinned ? 'text-amber-500' : 'text-gray-400'}`}
+          onClick={() => handleTogglePin(row)}
+          title={row.isPinned ? 'Unpin' : 'Pin'}
+        >
+          <Pin className="h-3.5 w-3.5" />
+        </Button>
+      ),
+    },
+    {
+      key: 'published',
       header: 'Status',
-      cell: (row: Announcement) => <StatusBadge status={row.isPublished ? 'published' : 'unpublished'} />,
+      cell: (row) => <StatusBadge status={row.isPublished ? 'published' : 'unpublished'} />,
     },
     {
-      key: 'publishedAt',
-      header: 'Published',
-      cell: (row: Announcement) => row.publishedAt
-        ? format(parseISO(row.publishedAt), 'MMM d, yyyy')
-        : <span className="text-gray-400">-</span>,
+      key: 'createdAt',
+      header: 'Created',
+      cell: (row) => (
+        <span className="text-xs text-gray-500 dark:text-gray-400">
+          {format(parseISO(row.publishedAt ?? row.createdBy), 'MMM d, yyyy')}
+        </span>
+      ),
+    },
+    {
+      key: 'views',
+      header: 'Views',
+      cell: () => (
+        <span className="text-xs text-gray-500 dark:text-gray-400">—</span>
+      ),
     },
     {
       key: 'actions',
       header: '',
-      cell: (row: Announcement) => (
-        <Button variant="destructive" size="sm" onClick={() => handleDelete(row.id, row.title)}>
-          Delete
-        </Button>
+      className: 'w-28',
+      cell: (row) => (
+        <div className="flex items-center gap-1">
+          <Button
+            variant="ghost"
+            size="icon"
+            className={`h-7 w-7 ${row.isPublished ? 'text-yellow-600' : 'text-green-600'}`}
+            onClick={() => handleTogglePublish(row)}
+            title={row.isPublished ? 'Unpublish' : 'Publish'}
+          >
+            {row.isPublished ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7"
+            onClick={() => handleEdit(row)}
+            aria-label="Edit"
+          >
+            <Pencil className="h-3.5 w-3.5" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7 text-red-500 hover:text-red-600"
+            onClick={() => handleDelete(row)}
+            aria-label="Delete"
+            disabled={deleteMutation.isPending}
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+          </Button>
+        </div>
       ),
     },
   ];
 
   return (
-    <div className="space-y-6">
+    <div className="px-4 sm:px-6 lg:px-8 py-8 max-w-7xl mx-auto">
       <PageHeader
         title="Manage Announcements"
-        subtitle="Create and publish partner announcements."
-        actions={<Button onClick={() => setCreateOpen(true)}><Plus className="h-4 w-4 mr-1.5" /> New Announcement</Button>}
-      />
-      <DataTable
-        columns={columns}
-        data={data?.data ?? []}
-        isLoading={isLoading}
-        emptyMessage="No announcements found."
-        pagination={data ? { page, pageSize: 20, total: data.total, onPageChange: setPage } : undefined}
+        subtitle={`${total} announcement${total !== 1 ? 's' : ''} total`}
+        actions={
+          <Button onClick={() => { setEditingAnnouncement(null); setFormOpen(true); }}>
+            <Plus className="h-4 w-4 mr-2" />
+            New Announcement
+          </Button>
+        }
       />
 
-      <Modal open={createOpen} onOpenChange={setCreateOpen} title="New Announcement" size="lg">
-        <div className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Title</label>
-            <Input value={newTitle} onChange={(e) => setNewTitle(e.target.value)} placeholder="Announcement title..." />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Body (HTML)</label>
-            <textarea
-              value={newBody}
-              onChange={(e) => setNewBody(e.target.value)}
-              rows={6}
-              placeholder="<p>Announcement content...</p>"
-              className="flex w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 dark:border-gray-600 dark:bg-gray-800 dark:text-white resize-none font-mono text-xs"
-            />
-          </div>
-          <div className="flex gap-3 justify-end">
-            <Button variant="outline" onClick={() => setCreateOpen(false)}>Cancel</Button>
-            <Button onClick={handleCreate} disabled={createAnn.isPending}>
-              {createAnn.isPending ? 'Creating...' : 'Save as Draft'}
-            </Button>
-          </div>
-        </div>
-      </Modal>
+      {/* Filters */}
+      <div className="flex items-center gap-3 mb-6">
+        <Select
+          value={typeFilter}
+          onChange={(e) => { setTypeFilter(e.target.value as AnnouncementType | ''); setPage(1); }}
+          className="w-48"
+        >
+          {TYPE_FILTER_OPTIONS.map((opt) => (
+            <option key={opt.value} value={opt.value}>{opt.label}</option>
+          ))}
+        </Select>
+      </div>
+
+      <DataTable<Announcement>
+        columns={columns}
+        data={announcements}
+        isLoading={isLoading}
+        emptyMessage="No announcements found"
+        emptyDescription="Create your first announcement."
+        pagination={{
+          page,
+          pageSize: PAGE_SIZE,
+          total,
+          onPageChange: setPage,
+        }}
+      />
+
+      <AnnouncementFormModal
+        open={formOpen}
+        onOpenChange={setFormOpen}
+        announcement={editingAnnouncement}
+        onSuccess={() => setEditingAnnouncement(null)}
+      />
     </div>
   );
 }
