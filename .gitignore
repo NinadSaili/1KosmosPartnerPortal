@@ -16,7 +16,7 @@ backend/.env
 # Compiled binaries and test output
 /bin/
 /api
-backend/api
+backend/bin/api
 *.exe
 *.exe~
 *.dll
