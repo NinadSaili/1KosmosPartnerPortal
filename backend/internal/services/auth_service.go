@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"time"
 
 	"github.com/1kosmos/partner-portal/internal/models"
 	"github.com/1kosmos/partner-portal/internal/repositories"
@@ -307,5 +306,3 @@ func (s *AuthService) CallSupabaseRefresh(ctx context.Context, refreshToken stri
 	return out.AccessToken, out.RefreshToken, nil
 }
 
-// ensure time is imported (used implicitly via repositories timestamps)
-var _ = time.Now

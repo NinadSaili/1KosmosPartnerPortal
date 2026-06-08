@@ -103,6 +103,107 @@ func (h *Handler) UpdateOrganization(w http.ResponseWriter, r *http.Request) {
 }
 
 // ---------------------------------------------------------------------------
+// Resource handlers (stub — not yet implemented)
+// ---------------------------------------------------------------------------
+
+// ListResources handles GET /api/v1/resources.
+func (h *Handler) ListResources(w http.ResponseWriter, r *http.Request) {
+	writeError(w, http.StatusNotImplemented, "not_implemented", "list resources not yet implemented")
+}
+
+// GetResource handles GET /api/v1/resources/{id}.
+func (h *Handler) GetResource(w http.ResponseWriter, r *http.Request) {
+	writeError(w, http.StatusNotImplemented, "not_implemented", "get resource not yet implemented")
+}
+
+// CreateResource handles POST /api/v1/resources (vendor_admin).
+func (h *Handler) CreateResource(w http.ResponseWriter, r *http.Request) {
+	writeError(w, http.StatusNotImplemented, "not_implemented", "create resource not yet implemented")
+}
+
+// UpdateResource handles PUT /api/v1/resources/{id} (vendor_admin).
+func (h *Handler) UpdateResource(w http.ResponseWriter, r *http.Request) {
+	writeError(w, http.StatusNotImplemented, "not_implemented", "update resource not yet implemented")
+}
+
+// DeleteResource handles DELETE /api/v1/resources/{id} (vendor_admin).
+func (h *Handler) DeleteResource(w http.ResponseWriter, r *http.Request) {
+	writeError(w, http.StatusNotImplemented, "not_implemented", "delete resource not yet implemented")
+}
+
+// ---------------------------------------------------------------------------
+// Deal handlers (stub — not yet implemented)
+// ---------------------------------------------------------------------------
+
+// ListDeals handles GET /api/v1/deals.
+func (h *Handler) ListDeals(w http.ResponseWriter, r *http.Request) {
+	writeError(w, http.StatusNotImplemented, "not_implemented", "list deals not yet implemented")
+}
+
+// GetDeal handles GET /api/v1/deals/{id}.
+func (h *Handler) GetDeal(w http.ResponseWriter, r *http.Request) {
+	writeError(w, http.StatusNotImplemented, "not_implemented", "get deal not yet implemented")
+}
+
+// CreateDeal handles POST /api/v1/deals.
+func (h *Handler) CreateDeal(w http.ResponseWriter, r *http.Request) {
+	writeError(w, http.StatusNotImplemented, "not_implemented", "create deal not yet implemented")
+}
+
+// UpdateDeal handles PUT /api/v1/deals/{id}.
+func (h *Handler) UpdateDeal(w http.ResponseWriter, r *http.Request) {
+	writeError(w, http.StatusNotImplemented, "not_implemented", "update deal not yet implemented")
+}
+
+// UpdateDealStatus handles PATCH /api/v1/deals/{id}/status (vendor_admin).
+func (h *Handler) UpdateDealStatus(w http.ResponseWriter, r *http.Request) {
+	writeError(w, http.StatusNotImplemented, "not_implemented", "update deal status not yet implemented")
+}
+
+// ---------------------------------------------------------------------------
+// Announcement handlers (stub — not yet implemented)
+// ---------------------------------------------------------------------------
+
+// ListAnnouncements handles GET /api/v1/announcements.
+func (h *Handler) ListAnnouncements(w http.ResponseWriter, r *http.Request) {
+	writeError(w, http.StatusNotImplemented, "not_implemented", "list announcements not yet implemented")
+}
+
+// GetAnnouncement handles GET /api/v1/announcements/{id}.
+func (h *Handler) GetAnnouncement(w http.ResponseWriter, r *http.Request) {
+	writeError(w, http.StatusNotImplemented, "not_implemented", "get announcement not yet implemented")
+}
+
+// CreateAnnouncement handles POST /api/v1/announcements (vendor_admin).
+func (h *Handler) CreateAnnouncement(w http.ResponseWriter, r *http.Request) {
+	writeError(w, http.StatusNotImplemented, "not_implemented", "create announcement not yet implemented")
+}
+
+// UpdateAnnouncement handles PUT /api/v1/announcements/{id} (vendor_admin).
+func (h *Handler) UpdateAnnouncement(w http.ResponseWriter, r *http.Request) {
+	writeError(w, http.StatusNotImplemented, "not_implemented", "update announcement not yet implemented")
+}
+
+// DeleteAnnouncement handles DELETE /api/v1/announcements/{id} (vendor_admin).
+func (h *Handler) DeleteAnnouncement(w http.ResponseWriter, r *http.Request) {
+	writeError(w, http.StatusNotImplemented, "not_implemented", "delete announcement not yet implemented")
+}
+
+// MarkAnnouncementRead handles POST /api/v1/announcements/{id}/read.
+func (h *Handler) MarkAnnouncementRead(w http.ResponseWriter, r *http.Request) {
+	writeError(w, http.StatusNotImplemented, "not_implemented", "mark announcement read not yet implemented")
+}
+
+// ---------------------------------------------------------------------------
+// AI handler (stub — not yet implemented)
+// ---------------------------------------------------------------------------
+
+// AIQuery handles POST /api/v1/ai/query.
+func (h *Handler) AIQuery(w http.ResponseWriter, r *http.Request) {
+	writeError(w, http.StatusNotImplemented, "not_implemented", "AI query not yet implemented")
+}
+
+// ---------------------------------------------------------------------------
 // Admin handlers
 // ---------------------------------------------------------------------------
 

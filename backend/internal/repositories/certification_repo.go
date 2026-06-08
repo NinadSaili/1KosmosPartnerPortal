@@ -28,20 +28,23 @@ func NewCertificationRepository(db *pgxpool.Pool) *CertificationRepository {
 // Certifications
 // ---------------------------------------------------------------------------
 
+// certSelectCols uses the actual columns present in the certifications table
+// (migration 002).  Model fields without DB equivalents are left zero-valued.
 const certSelectCols = `
-	id, title, slug, description, badge_image_url, validity_months,
-	passing_score_percent, is_active, created_by, created_at, updated_at`
+	id, title, slug, description, validity_months,
+	passing_score, created_at, updated_at`
 
 func scanCertification(row pgx.Row) (*models.Certification, error) {
 	var c models.Certification
 	err := row.Scan(
-		&c.ID, &c.Title, &c.Slug, &c.Description, &c.BadgeImageURL,
-		&c.ValidityMonths, &c.PassingScorePercent, &c.IsActive,
-		&c.CreatedBy, &c.CreatedAt, &c.UpdatedAt,
+		&c.ID, &c.Title, &c.Slug, &c.Description,
+		&c.ValidityMonths, &c.PassingScorePercent,
+		&c.CreatedAt, &c.UpdatedAt,
 	)
 	if err != nil {
 		return nil, err
 	}
+	c.IsActive = true // default true when reading from DB (no column in schema)
 	return &c, nil
 }
 
@@ -50,7 +53,6 @@ func (r *CertificationRepository) ListCertifications(ctx context.Context) ([]mod
 	const q = `
 		SELECT ` + certSelectCols + `
 		FROM certifications
-		WHERE deleted_at IS NULL
 		ORDER BY created_at ASC`
 
 	rows, err := r.db.Query(ctx, q)
@@ -72,7 +74,7 @@ func (r *CertificationRepository) ListCertifications(ctx context.Context) ([]mod
 
 // GetCertificationByID fetches a single certification by UUID.
 func (r *CertificationRepository) GetCertificationByID(ctx context.Context, id string) (*models.Certification, error) {
-	q := `SELECT ` + certSelectCols + ` FROM certifications WHERE id = $1 AND deleted_at IS NULL`
+	q := `SELECT ` + certSelectCols + ` FROM certifications WHERE id = $1`
 	c, err := scanCertification(r.db.QueryRow(ctx, q, id))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -91,8 +93,7 @@ func (r *CertificationRepository) GetCertificationRequirements(ctx context.Conte
 		FROM courses c
 		JOIN certification_course_requirements ccr ON ccr.course_id = c.id
 		WHERE ccr.certification_id = $1
-		  AND c.deleted_at IS NULL
-		ORDER BY ccr.sort_order ASC`
+		ORDER BY c.sort_order ASC`
 
 	rows, err := r.db.Query(ctx, q, certID)
 	if err != nil {
@@ -128,16 +129,19 @@ func (r *CertificationRepository) CreateCertification(ctx context.Context, c *mo
 		c.Slug = slugify(c.Title) + "-" + c.ID.String()[:8]
 	}
 
+	// Use a default type of "sales" when not set (schema requires it).
+	certType := "sales"
+
 	const q = `
-		INSERT INTO certifications (id, title, slug, description, badge_image_url, validity_months,
-		                            passing_score_percent, is_active, created_by, created_at, updated_at)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+		INSERT INTO certifications (id, title, slug, description, type, validity_months,
+		                            passing_score, created_at, updated_at)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
 		RETURNING ` + certSelectCols
 
 	created, err := scanCertification(r.db.QueryRow(ctx, q,
-		c.ID, c.Title, c.Slug, c.Description, c.BadgeImageURL,
-		c.ValidityMonths, c.PassingScorePercent, c.IsActive,
-		c.CreatedBy, c.CreatedAt, c.UpdatedAt,
+		c.ID, c.Title, c.Slug, c.Description, certType,
+		c.ValidityMonths, c.PassingScorePercent,
+		c.CreatedAt, c.UpdatedAt,
 	))
 	if err != nil {
 		return nil, fmt.Errorf("create certification: %w", err)
@@ -165,7 +169,7 @@ func (r *CertificationRepository) UpdateCertification(ctx context.Context, id st
 	args = append(args, id)
 
 	q := fmt.Sprintf(`
-		UPDATE certifications SET %s WHERE id = $%d AND deleted_at IS NULL
+		UPDATE certifications SET %s WHERE id = $%d
 		RETURNING `+certSelectCols,
 		strings.Join(setClauses, ", "), i)
 
@@ -193,11 +197,11 @@ func (r *CertificationRepository) SetCertificationRequirements(ctx context.Conte
 		return fmt.Errorf("set cert requirements: delete old: %w", err)
 	}
 
-	for i, cid := range courseIDs {
+	for _, cid := range courseIDs {
 		if _, err := tx.Exec(ctx,
-			`INSERT INTO certification_course_requirements (certification_id, course_id, is_required, sort_order)
-			 VALUES ($1, $2, true, $3) ON CONFLICT DO NOTHING`,
-			certID, cid, i,
+			`INSERT INTO certification_course_requirements (certification_id, course_id)
+			 VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+			certID, cid,
 		); err != nil {
 			return fmt.Errorf("set cert requirements: insert %s: %w", cid, err)
 		}
@@ -210,24 +214,31 @@ func (r *CertificationRepository) SetCertificationRequirements(ctx context.Conte
 // Assessment Schedules
 // ---------------------------------------------------------------------------
 
+// assessmentSelectCols maps to the actual columns in assessment_schedules
+// from migration 002.  The model has fields like ScheduledFor which we map
+// to requested_date; LocationOrURL has no direct DB column so it defaults to "".
 const assessmentSelectCols = `
-	id, certification_id, scheduled_for, location_or_url, max_participants,
-	instructor_id, notes, status, created_at, updated_at`
+	id, certification_id, user_id, requested_date,
+	status, notes, created_at, updated_at`
 
 func scanAssessment(row pgx.Row) (*models.AssessmentSchedule, error) {
 	var a models.AssessmentSchedule
+	var userID uuid.UUID
 	err := row.Scan(
-		&a.ID, &a.CertificationID, &a.ScheduledFor, &a.LocationOrURL,
-		&a.MaxParticipants, &a.InstructorID, &a.Notes, &a.Status,
-		&a.CreatedAt, &a.UpdatedAt,
+		&a.ID, &a.CertificationID, &userID, &a.ScheduledFor,
+		&a.Status, &a.Notes, &a.CreatedAt, &a.UpdatedAt,
 	)
 	if err != nil {
 		return nil, err
 	}
+	// LocationOrURL and MaxParticipants have no DB column; leave zero-valued.
+	// InstructorID maps to user_id for schedule owner context.
+	a.InstructorID = &userID
 	return &a, nil
 }
 
 // CreateAssessmentSchedule inserts a new assessment schedule.
+// ScheduledFor is stored as requested_date; InstructorID is used as user_id.
 func (r *CertificationRepository) CreateAssessmentSchedule(ctx context.Context, a *models.AssessmentSchedule) (*models.AssessmentSchedule, error) {
 	if a.ID == uuid.Nil {
 		a.ID = uuid.New()
@@ -239,17 +250,16 @@ func (r *CertificationRepository) CreateAssessmentSchedule(ctx context.Context, 
 		a.Status = "pending"
 	}
 
+	// Map InstructorID to user_id; if nil, use a nil UUID pointer.
 	const q = `
 		INSERT INTO assessment_schedules
-			(id, certification_id, scheduled_for, location_or_url, max_participants,
-			 instructor_id, notes, status, created_at, updated_at)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+			(id, certification_id, user_id, requested_date, status, notes, created_at, updated_at)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
 		RETURNING ` + assessmentSelectCols
 
 	created, err := scanAssessment(r.db.QueryRow(ctx, q,
-		a.ID, a.CertificationID, a.ScheduledFor, a.LocationOrURL,
-		a.MaxParticipants, a.InstructorID, a.Notes, a.Status,
-		a.CreatedAt, a.UpdatedAt,
+		a.ID, a.CertificationID, a.InstructorID, a.ScheduledFor,
+		a.Status, a.Notes, a.CreatedAt, a.UpdatedAt,
 	))
 	if err != nil {
 		return nil, fmt.Errorf("create assessment schedule: %w", err)
@@ -304,14 +314,12 @@ func (r *CertificationRepository) getAssessmentByID(ctx context.Context, id stri
 }
 
 // GetAssessmentsByUser returns all assessment schedules for a specific user.
+// The schema stores user_id on assessment_schedules directly.
 func (r *CertificationRepository) GetAssessmentsByUser(ctx context.Context, userID string) ([]models.AssessmentSchedule, error) {
-	// The schema stores user_id on assessment_schedules.
-	// If it's not directly on the table, join through assessment_results.
-	// Based on the migration, user_id is on assessment_schedules.
 	q := `SELECT ` + assessmentSelectCols + `
 		  FROM assessment_schedules
-		  WHERE instructor_id = $1 OR id IN (
-		      SELECT assessment_id FROM assessment_results WHERE user_id = $1
+		  WHERE id IN (
+		      SELECT assessment_schedule_id FROM assessment_results WHERE user_id = $1
 		  )
 		  ORDER BY scheduled_for DESC`
 
@@ -338,7 +346,7 @@ func (r *CertificationRepository) GetAssessmentsByOrg(ctx context.Context, orgID
 		SELECT DISTINCT ` + assessmentSelectCols + `
 		FROM assessment_schedules asched
 		WHERE asched.id IN (
-			SELECT ar.assessment_id FROM assessment_results ar
+			SELECT ar.assessment_schedule_id FROM assessment_results ar
 			JOIN users u ON u.id = ar.user_id
 			WHERE u.organization_id = $1
 		)
@@ -365,18 +373,20 @@ func (r *CertificationRepository) GetAssessmentsByOrg(ctx context.Context, orgID
 // Issued Certificates
 // ---------------------------------------------------------------------------
 
+// issuedCertSelectCols lists the columns available in the issued_certificates
+// table as created by migration 002.  The model has additional fields that are
+// mapped where available; unmapped model fields remain zero-valued.
 const issuedCertSelectCols = `
-	id, certification_id, user_id, organization_id, certificate_number,
-	issued_at, expires_at, revoked_at, revoked_by, revocation_reason,
-	pdf_storage_path, created_at`
+	id, certification_id, user_id,
+	cert_number, issued_at, expires_at,
+	revoked_at, revoked_by, created_at`
 
 func scanIssuedCert(row pgx.Row) (*models.IssuedCertificate, error) {
 	var ic models.IssuedCertificate
 	err := row.Scan(
-		&ic.ID, &ic.CertificationID, &ic.UserID, &ic.OrganizationID,
+		&ic.ID, &ic.CertificationID, &ic.UserID,
 		&ic.CertificateNumber, &ic.IssuedAt, &ic.ExpiresAt,
-		&ic.RevokedAt, &ic.RevokedBy, &ic.RevocationReason,
-		&ic.PDFStoragePath, &ic.CreatedAt,
+		&ic.RevokedAt, &ic.RevokedBy, &ic.CreatedAt,
 	)
 	if err != nil {
 		return nil, err
@@ -395,17 +405,13 @@ func (r *CertificationRepository) InsertIssuedCertificate(ctx context.Context, i
 
 	const q = `
 		INSERT INTO issued_certificates
-			(id, certification_id, user_id, organization_id, certificate_number,
-			 issued_at, expires_at, revoked_at, revoked_by, revocation_reason,
-			 pdf_storage_path, created_at)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+			(id, certification_id, user_id, cert_number, issued_at, expires_at)
+		VALUES ($1,$2,$3,$4,$5,$6)
 		RETURNING ` + issuedCertSelectCols
 
 	created, err := scanIssuedCert(r.db.QueryRow(ctx, q,
-		ic.ID, ic.CertificationID, ic.UserID, ic.OrganizationID,
+		ic.ID, ic.CertificationID, ic.UserID,
 		ic.CertificateNumber, ic.IssuedAt, ic.ExpiresAt,
-		ic.RevokedAt, ic.RevokedBy, ic.RevocationReason,
-		ic.PDFStoragePath, ic.CreatedAt,
 	))
 	if err != nil {
 		return nil, fmt.Errorf("insert issued certificate: %w", err)
@@ -451,11 +457,13 @@ func (r *CertificationRepository) GetIssuedCertificatesByUser(ctx context.Contex
 }
 
 // GetIssuedCertificatesByOrg returns all certificates for users in an org.
+// Joins with users since issued_certificates has no organization_id column.
 func (r *CertificationRepository) GetIssuedCertificatesByOrg(ctx context.Context, orgID string) ([]models.IssuedCertificate, error) {
 	q := `SELECT ` + issuedCertSelectCols + `
-		  FROM issued_certificates
-		  WHERE organization_id = $1
-		  ORDER BY issued_at DESC`
+		  FROM issued_certificates ic
+		  JOIN users u ON u.id = ic.user_id
+		  WHERE u.organization_id = $1
+		  ORDER BY ic.issued_at DESC`
 
 	rows, err := r.db.Query(ctx, q, orgID)
 	if err != nil {
@@ -478,7 +486,7 @@ func (r *CertificationRepository) GetIssuedCertificatesByOrg(ctx context.Context
 func (r *CertificationRepository) GetAllIssuedCertificates(ctx context.Context) ([]models.IssuedCertificate, error) {
 	q := `SELECT ` + issuedCertSelectCols + `
 		  FROM issued_certificates
-		  WHERE revoked_at IS NULL
+		  WHERE is_revoked = false
 		  ORDER BY issued_at DESC`
 
 	rows, err := r.db.Query(ctx, q)
@@ -538,7 +546,7 @@ func (r *CertificationRepository) GetExpiringCertificates(ctx context.Context, d
 	q := fmt.Sprintf(`
 		SELECT `+issuedCertSelectCols+`
 		FROM issued_certificates
-		WHERE revoked_at IS NULL
+		WHERE is_revoked = false
 		  AND %s = false
 		  AND expires_at::date = (CURRENT_DATE + $1 * INTERVAL '1 day')::date`,
 		reminderCol)
@@ -573,8 +581,7 @@ func (r *CertificationRepository) HasCompletedAllRequirements(ctx context.Contex
 		      WHERE l.course_id = ccr.course_id
 		        AND lp.user_id = $2
 		        AND lp.completed_at IS NOT NULL
-		  )
-		  AND ccr.is_required = true`
+		  )`
 
 	var eligible bool
 	if err := r.db.QueryRow(ctx, q, certID, userID).Scan(&eligible); err != nil {

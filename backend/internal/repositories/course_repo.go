@@ -23,6 +23,8 @@ func NewCourseRepository(db *pgxpool.Pool) *CourseRepository {
 	return &CourseRepository{db: db}
 }
 
+// courseSelectCols maps to actual columns in the courses table (migration 002).
+// No deleted_at or is_mandatory columns exist in the schema.
 const courseSelectCols = `
 	id, title, slug, description, thumbnail_url, duration_minutes, level,
 	is_published, sort_order, created_by, created_at, updated_at`
@@ -41,9 +43,9 @@ func scanCourse(row pgx.Row) (*models.Course, error) {
 }
 
 // ListCourses returns a paginated list of courses with optional tag, level, and search filters.
-// Non-admin callers only see published courses; full-text search uses pg_trgm similarity.
+// Full-text search uses ILIKE; the courses table has no deleted_at column.
 func (r *CourseRepository) ListCourses(ctx context.Context, tag, level, search string, offset, limit int) ([]models.Course, int, error) {
-	conditions := []string{"deleted_at IS NULL"}
+	conditions := []string{"1=1"}
 	args := []any{}
 	idx := 1
 
@@ -99,7 +101,7 @@ func (r *CourseRepository) ListCourses(ctx context.Context, tag, level, search s
 
 // GetCourseByID fetches a single course by its UUID.
 func (r *CourseRepository) GetCourseByID(ctx context.Context, id string) (*models.Course, error) {
-	q := fmt.Sprintf("SELECT %s FROM courses WHERE id = $1 AND deleted_at IS NULL", courseSelectCols)
+	q := fmt.Sprintf("SELECT %s FROM courses WHERE id = $1", courseSelectCols)
 	c, err := scanCourse(r.db.QueryRow(ctx, q, id))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -111,17 +113,20 @@ func (r *CourseRepository) GetCourseByID(ctx context.Context, id string) (*model
 }
 
 // GetCourseWithLessons fetches a course and all its non-deleted lessons.
+// Lesson columns map to the actual DB schema (migration 002).
 func (r *CourseRepository) GetCourseWithLessons(ctx context.Context, id string) (*models.Course, []models.Lesson, error) {
 	course, err := r.GetCourseByID(ctx, id)
 	if err != nil {
 		return nil, nil, err
 	}
 
+	// DB columns: id, course_id, title, type (→ContentType), content_url,
+	//             duration_minutes, sort_order, is_required, created_at, updated_at
 	const lq = `
-		SELECT id, course_id, title, slug, content_type, content_url, content_body,
-		       duration_minutes, sort_order, is_published, created_at, updated_at
+		SELECT id, course_id, title, type, content_url,
+		       duration_minutes, sort_order, is_required, created_at, updated_at
 		FROM lessons
-		WHERE course_id = $1 AND deleted_at IS NULL
+		WHERE course_id = $1
 		ORDER BY sort_order ASC, created_at ASC`
 
 	rows, err := r.db.Query(ctx, lq, id)
@@ -133,13 +138,16 @@ func (r *CourseRepository) GetCourseWithLessons(ctx context.Context, id string) 
 	var lessons []models.Lesson
 	for rows.Next() {
 		var l models.Lesson
+		var isRequired bool
 		if err := rows.Scan(
-			&l.ID, &l.CourseID, &l.Title, &l.Slug, &l.ContentType,
-			&l.ContentURL, &l.ContentBody, &l.DurationMinutes,
-			&l.SortOrder, &l.IsPublished, &l.CreatedAt, &l.UpdatedAt,
+			&l.ID, &l.CourseID, &l.Title, &l.ContentType, &l.ContentURL,
+			&l.DurationMinutes, &l.SortOrder, &isRequired,
+			&l.CreatedAt, &l.UpdatedAt,
 		); err != nil {
 			return nil, nil, fmt.Errorf("scan lesson: %w", err)
 		}
+		// Map is_required → IsPublished as a proxy (both indicate lesson visibility)
+		l.IsPublished = isRequired
 		lessons = append(lessons, l)
 	}
 	return course, lessons, rows.Err()
@@ -158,12 +166,11 @@ func (r *CourseRepository) CreateCourse(ctx context.Context, c *models.Course) (
 		c.Slug = slugify(c.Title) + "-" + c.ID.String()[:8]
 	}
 
-	const q = `
+	q := fmt.Sprintf(`
 		INSERT INTO courses (id, title, slug, description, thumbnail_url, duration_minutes,
 		                     level, is_published, sort_order, created_by, created_at, updated_at)
 		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
-		RETURNING id, title, slug, description, thumbnail_url, duration_minutes, level,
-		          is_published, sort_order, created_by, created_at, updated_at`
+		RETURNING %s`, courseSelectCols)
 
 	created, err := scanCourse(r.db.QueryRow(ctx, q,
 		c.ID, c.Title, c.Slug, c.Description, c.ThumbnailURL, c.DurationMinutes,
@@ -195,9 +202,8 @@ func (r *CourseRepository) UpdateCourse(ctx context.Context, id string, updates 
 	args = append(args, id)
 
 	q := fmt.Sprintf(`
-		UPDATE courses SET %s WHERE id = $%d AND deleted_at IS NULL
-		RETURNING id, title, slug, description, thumbnail_url, duration_minutes, level,
-		          is_published, sort_order, created_by, created_at, updated_at`,
+		UPDATE courses SET %s WHERE id = $%d
+		RETURNING `+courseSelectCols,
 		strings.Join(setClauses, ", "), i)
 
 	c, err := scanCourse(r.db.QueryRow(ctx, q, args...))
@@ -210,12 +216,9 @@ func (r *CourseRepository) UpdateCourse(ctx context.Context, id string, updates 
 	return c, nil
 }
 
-// DeleteCourse soft-deletes a course.
+// DeleteCourse hard-deletes a course (the courses table has no deleted_at column).
 func (r *CourseRepository) DeleteCourse(ctx context.Context, id string) error {
-	ct, err := r.db.Exec(ctx,
-		"UPDATE courses SET deleted_at = $1, updated_at = $1 WHERE id = $2 AND deleted_at IS NULL",
-		time.Now().UTC(), id,
-	)
+	ct, err := r.db.Exec(ctx, "DELETE FROM courses WHERE id = $1", id)
 	if err != nil {
 		return fmt.Errorf("delete course: %w", err)
 	}
@@ -273,7 +276,26 @@ func (r *CourseRepository) SetCourseTags(ctx context.Context, courseID string, t
 // Lessons
 // ---------------------------------------------------------------------------
 
-// CreateLesson inserts a new lesson record.
+// scanLesson reads a lesson row using the actual DB columns from migration 002.
+func scanLesson(rows interface {
+	Scan(...any) error
+}) (*models.Lesson, error) {
+	var l models.Lesson
+	var isRequired bool
+	if err := rows.Scan(
+		&l.ID, &l.CourseID, &l.Title, &l.ContentType, &l.ContentURL,
+		&l.DurationMinutes, &l.SortOrder, &isRequired,
+		&l.CreatedAt, &l.UpdatedAt,
+	); err != nil {
+		return nil, err
+	}
+	l.IsPublished = isRequired
+	return &l, nil
+}
+
+const lessonSelectCols = `id, course_id, title, type, content_url, duration_minutes, sort_order, is_required, created_at, updated_at`
+
+// CreateLesson inserts a new lesson record using the actual DB schema.
 func (r *CourseRepository) CreateLesson(ctx context.Context, l *models.Lesson) (*models.Lesson, error) {
 	if l.ID == uuid.Nil {
 		l.ID = uuid.New()
@@ -282,30 +304,21 @@ func (r *CourseRepository) CreateLesson(ctx context.Context, l *models.Lesson) (
 	l.CreatedAt = now
 	l.UpdatedAt = now
 
-	if l.Slug == "" {
-		l.Slug = slugify(l.Title) + "-" + l.ID.String()[:8]
-	}
-
 	const q = `
-		INSERT INTO lessons (id, course_id, title, slug, content_type, content_url, content_body,
-		                     duration_minutes, sort_order, is_published, created_at, updated_at)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
-		RETURNING id, course_id, title, slug, content_type, content_url, content_body,
-		          duration_minutes, sort_order, is_published, created_at, updated_at`
+		INSERT INTO lessons (id, course_id, title, type, content_url,
+		                     duration_minutes, sort_order, is_required, created_at, updated_at)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+		RETURNING ` + lessonSelectCols
 
-	var out models.Lesson
-	err := r.db.QueryRow(ctx, q,
-		l.ID, l.CourseID, l.Title, l.Slug, l.ContentType, l.ContentURL, l.ContentBody,
-		l.DurationMinutes, l.SortOrder, l.IsPublished, l.CreatedAt, l.UpdatedAt,
-	).Scan(
-		&out.ID, &out.CourseID, &out.Title, &out.Slug, &out.ContentType,
-		&out.ContentURL, &out.ContentBody, &out.DurationMinutes,
-		&out.SortOrder, &out.IsPublished, &out.CreatedAt, &out.UpdatedAt,
-	)
+	out, err := scanLesson(r.db.QueryRow(ctx, q,
+		l.ID, l.CourseID, l.Title, l.ContentType, l.ContentURL,
+		l.DurationMinutes, l.SortOrder, l.IsPublished,
+		l.CreatedAt, l.UpdatedAt,
+	))
 	if err != nil {
 		return nil, fmt.Errorf("create lesson: %w", err)
 	}
-	return &out, nil
+	return out, nil
 }
 
 // UpdateLesson performs a dynamic UPDATE on the lessons table.
@@ -328,53 +341,36 @@ func (r *CourseRepository) UpdateLesson(ctx context.Context, id string, updates 
 	args = append(args, id)
 
 	q := fmt.Sprintf(`
-		UPDATE lessons SET %s WHERE id = $%d AND deleted_at IS NULL
-		RETURNING id, course_id, title, slug, content_type, content_url, content_body,
-		          duration_minutes, sort_order, is_published, created_at, updated_at`,
+		UPDATE lessons SET %s WHERE id = $%d
+		RETURNING `+lessonSelectCols,
 		strings.Join(setClauses, ", "), i)
 
-	var out models.Lesson
-	err := r.db.QueryRow(ctx, q, args...).Scan(
-		&out.ID, &out.CourseID, &out.Title, &out.Slug, &out.ContentType,
-		&out.ContentURL, &out.ContentBody, &out.DurationMinutes,
-		&out.SortOrder, &out.IsPublished, &out.CreatedAt, &out.UpdatedAt,
-	)
+	out, err := scanLesson(r.db.QueryRow(ctx, q, args...))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrNotFound
 		}
 		return nil, fmt.Errorf("update lesson: %w", err)
 	}
-	return &out, nil
+	return out, nil
 }
 
 func (r *CourseRepository) getLessonByID(ctx context.Context, id string) (*models.Lesson, error) {
-	const q = `
-		SELECT id, course_id, title, slug, content_type, content_url, content_body,
-		       duration_minutes, sort_order, is_published, created_at, updated_at
-		FROM lessons WHERE id = $1 AND deleted_at IS NULL`
+	q := `SELECT ` + lessonSelectCols + ` FROM lessons WHERE id = $1`
 
-	var out models.Lesson
-	err := r.db.QueryRow(ctx, q, id).Scan(
-		&out.ID, &out.CourseID, &out.Title, &out.Slug, &out.ContentType,
-		&out.ContentURL, &out.ContentBody, &out.DurationMinutes,
-		&out.SortOrder, &out.IsPublished, &out.CreatedAt, &out.UpdatedAt,
-	)
+	out, err := scanLesson(r.db.QueryRow(ctx, q, id))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrNotFound
 		}
 		return nil, fmt.Errorf("get lesson by id: %w", err)
 	}
-	return &out, nil
+	return out, nil
 }
 
-// DeleteLesson soft-deletes a lesson.
+// DeleteLesson hard-deletes a lesson (the lessons table has no deleted_at column).
 func (r *CourseRepository) DeleteLesson(ctx context.Context, id string) error {
-	ct, err := r.db.Exec(ctx,
-		"UPDATE lessons SET deleted_at = $1, updated_at = $1 WHERE id = $2 AND deleted_at IS NULL",
-		time.Now().UTC(), id,
-	)
+	ct, err := r.db.Exec(ctx, "DELETE FROM lessons WHERE id = $1", id)
 	if err != nil {
 		return fmt.Errorf("delete lesson: %w", err)
 	}
@@ -384,11 +380,11 @@ func (r *CourseRepository) DeleteLesson(ctx context.Context, id string) error {
 	return nil
 }
 
-// GetLessonsByCount returns the total number of non-deleted lessons in a course.
+// GetLessonsByCount returns the total number of lessons in a course.
 func (r *CourseRepository) GetLessonsByCount(ctx context.Context, courseID string) (int, error) {
 	var count int
 	err := r.db.QueryRow(ctx,
-		"SELECT COUNT(*) FROM lessons WHERE course_id = $1 AND deleted_at IS NULL",
+		"SELECT COUNT(*) FROM lessons WHERE course_id = $1",
 		courseID,
 	).Scan(&count)
 	if err != nil {
@@ -402,28 +398,26 @@ func (r *CourseRepository) GetLessonsByCount(ctx context.Context, courseID strin
 // ---------------------------------------------------------------------------
 
 // UpsertLessonProgress marks a lesson as completed for a user.
+// The lesson_progress table has columns: id, user_id, lesson_id, completed_at.
 func (r *CourseRepository) UpsertLessonProgress(ctx context.Context, userID, lessonID string) error {
-	// Fetch course_id for the lesson so we can store it on the progress record.
-	var courseID uuid.UUID
+	// Verify the lesson exists.
+	var exists bool
 	if err := r.db.QueryRow(ctx,
-		"SELECT course_id FROM lessons WHERE id = $1 AND deleted_at IS NULL",
-		lessonID,
-	).Scan(&courseID); err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return ErrNotFound
-		}
-		return fmt.Errorf("upsert lesson progress: get course id: %w", err)
+		"SELECT EXISTS(SELECT 1 FROM lessons WHERE id = $1)", lessonID,
+	).Scan(&exists); err != nil {
+		return fmt.Errorf("upsert lesson progress: check lesson: %w", err)
+	}
+	if !exists {
+		return ErrNotFound
 	}
 
 	now := time.Now().UTC()
 	const q = `
-		INSERT INTO lesson_progress (id, user_id, lesson_id, course_id, completed_at, last_accessed_at)
-		VALUES ($1, $2, $3, $4, $5, $5)
-		ON CONFLICT (user_id, lesson_id) DO UPDATE
-			SET completed_at     = COALESCE(lesson_progress.completed_at, EXCLUDED.completed_at),
-			    last_accessed_at = EXCLUDED.last_accessed_at`
+		INSERT INTO lesson_progress (id, user_id, lesson_id, completed_at)
+		VALUES ($1, $2, $3, $4)
+		ON CONFLICT (user_id, lesson_id) DO NOTHING`
 
-	_, err := r.db.Exec(ctx, q, uuid.New(), userID, lessonID, courseID, now)
+	_, err := r.db.Exec(ctx, q, uuid.New(), userID, lessonID, now)
 	if err != nil {
 		return fmt.Errorf("upsert lesson progress: %w", err)
 	}
@@ -431,11 +425,13 @@ func (r *CourseRepository) UpsertLessonProgress(ctx context.Context, userID, les
 }
 
 // GetLessonProgress returns all lesson progress rows for a user in a course.
+// Joins with lessons to filter by course and to populate CourseID on the model.
 func (r *CourseRepository) GetLessonProgress(ctx context.Context, userID, courseID string) ([]models.LessonProgress, error) {
 	const q = `
-		SELECT id, user_id, lesson_id, course_id, completed_at, time_spent_secs, last_accessed_at
-		FROM lesson_progress
-		WHERE user_id = $1 AND course_id = $2`
+		SELECT lp.id, lp.user_id, lp.lesson_id, l.course_id, lp.completed_at
+		FROM lesson_progress lp
+		JOIN lessons l ON l.id = lp.lesson_id
+		WHERE lp.user_id = $1 AND l.course_id = $2`
 
 	rows, err := r.db.Query(ctx, q, userID, courseID)
 	if err != nil {
@@ -447,21 +443,21 @@ func (r *CourseRepository) GetLessonProgress(ctx context.Context, userID, course
 	for rows.Next() {
 		var lp models.LessonProgress
 		if err := rows.Scan(
-			&lp.ID, &lp.UserID, &lp.LessonID, &lp.CourseID,
-			&lp.CompletedAt, &lp.TimeSpentSecs, &lp.LastAccessedAt,
+			&lp.ID, &lp.UserID, &lp.LessonID, &lp.CourseID, &lp.CompletedAt,
 		); err != nil {
 			return nil, fmt.Errorf("scan lesson progress: %w", err)
 		}
+		// TimeSpentSecs and LastAccessedAt have no DB columns; left zero-valued.
 		result = append(result, lp)
 	}
 	return result, rows.Err()
 }
 
-// CountCompletedLessons returns the number of completed and total published
-// lessons for a user in a course.
+// CountCompletedLessons returns the number of completed and total lessons
+// for a user in a course.
 func (r *CourseRepository) CountCompletedLessons(ctx context.Context, userID, courseID string) (completed, total int, err error) {
 	if err = r.db.QueryRow(ctx,
-		`SELECT COUNT(*) FROM lessons WHERE course_id = $1 AND is_published = true AND deleted_at IS NULL`,
+		`SELECT COUNT(*) FROM lessons WHERE course_id = $1`,
 		courseID,
 	).Scan(&total); err != nil {
 		return 0, 0, fmt.Errorf("count total lessons: %w", err)
@@ -470,9 +466,8 @@ func (r *CourseRepository) CountCompletedLessons(ctx context.Context, userID, co
 	if err = r.db.QueryRow(ctx,
 		`SELECT COUNT(*) FROM lesson_progress lp
 		 JOIN lessons l ON l.id = lp.lesson_id
-		 WHERE lp.user_id = $1 AND lp.course_id = $2
-		   AND lp.completed_at IS NOT NULL
-		   AND l.is_published = true AND l.deleted_at IS NULL`,
+		 WHERE lp.user_id = $1 AND l.course_id = $2
+		   AND lp.completed_at IS NOT NULL`,
 		userID, courseID,
 	).Scan(&completed); err != nil {
 		return 0, 0, fmt.Errorf("count completed lessons: %w", err)
