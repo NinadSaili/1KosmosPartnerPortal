@@ -1,143 +1,359 @@
-import React from 'react';
-import { useParams, Link } from 'react-router-dom';
-import { ChevronLeft, DollarSign, Calendar, User, Building2, FileText } from 'lucide-react';
-import { format, parseISO } from 'date-fns';
-import { PageHeader } from '@/components/ui/PageHeader';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
+import React, { useState } from 'react';
+import { useParams, useNavigate, Link } from 'react-router-dom';
+import { format, isPast, parseISO } from 'date-fns';
+import {
+  ArrowLeft,
+  Building2,
+  Mail,
+  User,
+  DollarSign,
+  Calendar,
+  FileText,
+  ExternalLink,
+  Pencil,
+  CheckCircle,
+  XCircle,
+  ChevronRight,
+  Clock,
+} from 'lucide-react';
+import { motion } from 'framer-motion';
 import { Button } from '@/components/ui/Button';
+import { Badge } from '@/components/ui/Badge';
 import { StatusBadge } from '@/components/ui/StatusBadge';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
-import { useDeal, useUpdateDealStatus } from '@/hooks/useDeals';
-import { useAuth } from '@/hooks/useAuth';
+import { EmptyState } from '@/components/ui/EmptyState';
+import { StatusTimeline } from '@/components/deals/StatusTimeline';
 import { useToast } from '@/components/ui/Toast';
+import { useAuth } from '@/contexts/AuthContext';
+import { useDeal, useUpdateDealStatus } from '@/hooks/useDeals';
 
-export default function DealDetailPage() {
-  const { dealId } = useParams<{ dealId: string }>();
-  const { data: deal, isLoading } = useDeal(dealId!);
-  const updateStatus = useUpdateDealStatus();
-  const { isVendorAdmin } = useAuth();
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function formatCurrency(value: number): string {
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+    maximumFractionDigits: 0,
+  }).format(value);
+}
+
+// ─── Info Row ──────────────────────────────────────────────────────────────────
+
+function InfoRow({
+  icon,
+  label,
+  value,
+  valueClassName,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: React.ReactNode;
+  valueClassName?: string;
+}) {
+  return (
+    <div className="flex items-start gap-3">
+      <div className="h-8 w-8 rounded-lg bg-gray-100 dark:bg-gray-800 flex items-center justify-center flex-shrink-0 mt-0.5">
+        <span className="text-gray-500">{icon}</span>
+      </div>
+      <div>
+        <p className="text-xs text-gray-500 dark:text-gray-400">{label}</p>
+        <p className={`text-sm font-medium text-gray-900 dark:text-white mt-0.5 ${valueClassName ?? ''}`}>
+          {value}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+// ─── Status Action Card ────────────────────────────────────────────────────────
+
+interface StatusActionCardProps {
+  dealId: string;
+  status: string;
+  submitterId: string;
+  currentUserId: string;
+  isVendorAdmin: boolean;
+}
+
+function StatusActionCard({
+  dealId,
+  status,
+  submitterId,
+  currentUserId,
+  isVendorAdmin,
+}: StatusActionCardProps) {
+  const navigate = useNavigate();
   const { success, error: showError } = useToast();
+  const updateStatus = useUpdateDealStatus();
+  const [comment, setComment] = useState('');
 
-  const handleStatusChange = async (status: string) => {
+  const handleStatusChange = async (newStatus: string) => {
     try {
-      await updateStatus.mutateAsync({ id: dealId!, status });
-      success(`Deal ${status}`, `The deal has been ${status}.`);
-    } catch {
-      showError('Failed to update status', 'Please try again.');
+      await updateStatus.mutateAsync({ id: dealId, status: newStatus, comment: comment || undefined });
+      success(`Status updated`, `Deal is now ${newStatus.replace('_', ' ')}.`);
+      setComment('');
+    } catch (err: unknown) {
+      showError('Update failed', err instanceof Error ? err.message : 'Please try again.');
     }
   };
 
-  if (isLoading) return <div className="flex justify-center py-20"><LoadingSpinner size="lg" /></div>;
-  if (!deal) return <div className="text-center py-20 text-gray-500">Deal not found.</div>;
+  const isOwner = submitterId === currentUserId;
+  const isPending = updateStatus.isPending;
 
   return (
-    <div className="space-y-6">
-      <Link to="/deals" className="text-sm text-gray-500 hover:text-brand-600 flex items-center gap-1">
-        <ChevronLeft className="h-4 w-4" /> Back to Deals
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">Actions</CardTitle>
+      </CardHeader>
+      <CardContent className="pt-0 space-y-3">
+        {status === 'draft' && (isOwner || isVendorAdmin) && (
+          <>
+            <Button variant="outline" className="w-full gap-2" onClick={() => navigate(`/deals/new`)}>
+              <Pencil className="h-4 w-4" />
+              Edit Deal
+            </Button>
+            <Button className="w-full gap-2" onClick={() => handleStatusChange('submitted')} disabled={isPending}>
+              <ChevronRight className="h-4 w-4" />
+              {isPending ? 'Submitting…' : 'Submit for Review'}
+            </Button>
+          </>
+        )}
+
+        {isVendorAdmin && status === 'submitted' && (
+          <Button variant="outline" className="w-full gap-2" onClick={() => handleStatusChange('under_review')} disabled={isPending}>
+            <Clock className="h-4 w-4" />
+            {isPending ? 'Moving…' : 'Move to Under Review'}
+          </Button>
+        )}
+
+        {isVendorAdmin && status === 'under_review' && (
+          <>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                Review Comment (optional)
+              </label>
+              <textarea
+                value={comment}
+                onChange={(e) => setComment(e.target.value)}
+                rows={3}
+                placeholder="Add a comment for the partner…"
+                className="flex w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm placeholder:text-gray-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-gray-600 dark:bg-gray-800 dark:text-white"
+              />
+            </div>
+            <Button variant="success" className="w-full gap-2" onClick={() => handleStatusChange('approved')} disabled={isPending}>
+              <CheckCircle className="h-4 w-4" />
+              {isPending ? 'Approving…' : 'Approve Deal'}
+            </Button>
+            <Button variant="destructive" className="w-full gap-2" onClick={() => handleStatusChange('rejected')} disabled={isPending}>
+              <XCircle className="h-4 w-4" />
+              {isPending ? 'Rejecting…' : 'Reject Deal'}
+            </Button>
+          </>
+        )}
+
+        {(status === 'approved' || status === 'rejected') && (
+          <p className="text-sm text-gray-500 dark:text-gray-400 text-center py-2">
+            This deal is <strong>{status}</strong>. No further actions available.
+          </p>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+// ─── Page ─────────────────────────────────────────────────────────────────────
+
+export default function DealDetailPage() {
+  const { id } = useParams<{ id: string }>();
+  const { isVendorAdmin, user } = useAuth();
+  const { data: deal, isLoading, isError } = useDeal(id!);
+
+  if (isLoading) {
+    return <LoadingSpinner className="py-40" />;
+  }
+
+  if (isError || !deal) {
+    return (
+      <EmptyState
+        title="Deal not found"
+        description="This deal may have been removed or you don't have access."
+        action={<Button onClick={() => window.history.back()}>Go Back</Button>}
+      />
+    );
+  }
+
+  const closeDatePast =
+    isPast(parseISO(deal.expectedCloseDate)) &&
+    deal.status !== 'approved' &&
+    deal.status !== 'rejected';
+
+  return (
+    <div className="px-4 sm:px-6 lg:px-8 py-8 max-w-7xl mx-auto">
+      <Link
+        to="/deals"
+        className="inline-flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 mb-6 transition-colors"
+      >
+        <ArrowLeft className="h-4 w-4" />
+        Back to Deals
       </Link>
 
-      <PageHeader
-        title={deal.companyName}
-        subtitle={`Deal registered on ${format(parseISO(deal.createdAt), 'MMMM d, yyyy')}`}
-        actions={
-          <div className="flex items-center gap-2">
+      {/* Header */}
+      <div className="flex flex-wrap items-start gap-4 mb-8">
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-3 flex-wrap">
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">{deal.companyName}</h1>
             <StatusBadge status={deal.status} />
-            {isVendorAdmin && deal.status === 'submitted' && (
-              <>
-                <Button size="sm" variant="outline" onClick={() => handleStatusChange('under_review')}>Mark Under Review</Button>
-                <Button size="sm" onClick={() => handleStatusChange('approved')}>Approve</Button>
-                <Button size="sm" variant="destructive" onClick={() => handleStatusChange('rejected')}>Reject</Button>
-              </>
-            )}
-            {deal.status === 'draft' && (
-              <Button size="sm" onClick={() => handleStatusChange('submitted')}>Submit for Review</Button>
-            )}
+            <Badge variant="outline">{deal.vertical}</Badge>
           </div>
-        }
-      />
+          <p className="mt-1 text-xl font-semibold text-indigo-600 dark:text-indigo-400">
+            {formatCurrency(deal.opportunityValueUsd)}
+          </p>
+        </div>
+      </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 space-y-4">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        {/* Left: main content */}
+        <motion.div
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3 }}
+          className="lg:col-span-2 space-y-6"
+        >
+          {/* Contact */}
           <Card>
-            <CardHeader><CardTitle>Deal Information</CardTitle></CardHeader>
-            <CardContent>
-              <dl className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {[
-                  { label: 'Company', value: deal.companyName, icon: Building2 },
-                  { label: 'Contact', value: deal.contactName, icon: User },
-                  { label: 'Email', value: deal.contactEmail, icon: FileText },
-                  { label: 'Vertical', value: deal.vertical, icon: FileText },
-                  { label: 'Opportunity Value', value: `$${deal.opportunityValueUsd.toLocaleString()}`, icon: DollarSign },
-                  { label: 'Expected Close', value: format(parseISO(deal.expectedCloseDate), 'MMM d, yyyy'), icon: Calendar },
-                ].map(({ label, value, icon: Icon }) => (
-                  <div key={label} className="flex items-start gap-3">
-                    <Icon className="h-4 w-4 text-gray-400 mt-0.5 flex-shrink-0" />
-                    <div>
-                      <dt className="text-xs text-gray-500 dark:text-gray-400">{label}</dt>
-                      <dd className="text-sm font-medium text-gray-900 dark:text-white mt-0.5">{value}</dd>
-                    </div>
-                  </div>
-                ))}
-              </dl>
+            <CardHeader><CardTitle className="text-base">Contact Information</CardTitle></CardHeader>
+            <CardContent className="pt-0 grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <InfoRow icon={<User className="h-4 w-4" />} label="Contact Name" value={deal.contactName} />
+              <InfoRow
+                icon={<Mail className="h-4 w-4" />}
+                label="Contact Email"
+                value={
+                  <a href={`mailto:${deal.contactEmail}`} className="text-indigo-600 dark:text-indigo-400 hover:underline">
+                    {deal.contactEmail}
+                  </a>
+                }
+              />
+              <InfoRow icon={<Building2 className="h-4 w-4" />} label="Vertical" value={deal.vertical} />
+            </CardContent>
+          </Card>
+
+          {/* Opportunity */}
+          <Card>
+            <CardHeader><CardTitle className="text-base">Opportunity Details</CardTitle></CardHeader>
+            <CardContent className="pt-0 grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <InfoRow icon={<DollarSign className="h-4 w-4" />} label="Opportunity Value" value={formatCurrency(deal.opportunityValueUsd)} />
+              <InfoRow
+                icon={<Calendar className="h-4 w-4" />}
+                label="Expected Close"
+                value={format(parseISO(deal.expectedCloseDate), 'MMMM d, yyyy')}
+                valueClassName={closeDatePast ? 'text-red-600 dark:text-red-400' : undefined}
+              />
+              {deal.competingVendors.length > 0 && (
+                <div className="sm:col-span-2">
+                  <InfoRow
+                    icon={<Building2 className="h-4 w-4" />}
+                    label="Competing Vendors"
+                    value={
+                      <div className="flex flex-wrap gap-1.5 mt-1">
+                        {deal.competingVendors.map((v) => <Badge key={v} variant="secondary">{v}</Badge>)}
+                      </div>
+                    }
+                  />
+                </div>
+              )}
               {deal.notes && (
-                <div className="mt-4 pt-4 border-t border-gray-100 dark:border-gray-800">
-                  <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Notes</p>
-                  <p className="text-sm text-gray-700 dark:text-gray-300">{deal.notes}</p>
+                <div className="sm:col-span-2">
+                  <InfoRow
+                    icon={<FileText className="h-4 w-4" />}
+                    label="Notes"
+                    value={<span className="leading-relaxed">{deal.notes}</span>}
+                  />
+                </div>
+              )}
+              {deal.reviewerComment && (
+                <div className="sm:col-span-2">
+                  <InfoRow
+                    icon={<FileText className="h-4 w-4" />}
+                    label="Reviewer Comment"
+                    value={<em>"{deal.reviewerComment}"</em>}
+                  />
                 </div>
               )}
             </CardContent>
           </Card>
 
-          {/* Status History */}
-          {deal.history && deal.history.length > 0 && (
+          {/* Documents */}
+          {deal.documents && deal.documents.length > 0 && (
             <Card>
-              <CardHeader><CardTitle>Status History</CardTitle></CardHeader>
-              <CardContent>
-                <ol className="space-y-3">
-                  {deal.history.map((h) => (
-                    <li key={h.id} className="flex items-start gap-3 text-sm">
-                      <div className="h-2 w-2 rounded-full bg-brand-500 mt-2 flex-shrink-0" />
-                      <div>
-                        <p className="text-gray-900 dark:text-white">
-                          <span className="capitalize">{h.fromStatus ?? 'Created'}</span>
-                          {' → '}
-                          <span className="font-medium capitalize">{h.toStatus}</span>
-                        </p>
-                        {h.comment && <p className="text-gray-500 dark:text-gray-400">{h.comment}</p>}
-                        <p className="text-xs text-gray-400">{format(parseISO(h.createdAt), 'MMM d, yyyy HH:mm')}</p>
-                      </div>
-                    </li>
-                  ))}
-                </ol>
+              <CardHeader><CardTitle className="text-base">Supporting Documents</CardTitle></CardHeader>
+              <CardContent className="pt-0 space-y-2">
+                {deal.documents.map((doc) => (
+                  <a
+                    key={doc.id}
+                    href={doc.fileUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-3 p-3 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors group"
+                  >
+                    <FileText className="h-5 w-5 text-indigo-500 shrink-0" />
+                    <span className="text-sm font-medium text-gray-900 dark:text-white flex-1 truncate">
+                      {doc.fileName || doc.fileUrl}
+                    </span>
+                    <ExternalLink className="h-4 w-4 text-gray-400 group-hover:text-indigo-500 shrink-0" />
+                  </a>
+                ))}
               </CardContent>
             </Card>
           )}
-        </div>
 
-        <div>
+          {/* Status timeline */}
           <Card>
-            <CardContent className="p-5 space-y-3 text-sm">
-              <div className="flex justify-between">
-                <span className="text-gray-500">Status</span>
-                <StatusBadge status={deal.status} />
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-500">Created</span>
-                <span className="font-medium">{format(parseISO(deal.createdAt), 'MMM d, yyyy')}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-500">Last Updated</span>
-                <span className="font-medium">{format(parseISO(deal.updatedAt), 'MMM d, yyyy')}</span>
-              </div>
-              {deal.reviewerComment && (
-                <div className="pt-3 border-t border-gray-100 dark:border-gray-800">
-                  <p className="text-xs text-gray-500 mb-1">Reviewer Comment</p>
-                  <p className="text-gray-700 dark:text-gray-300 text-xs">{deal.reviewerComment}</p>
-                </div>
+            <CardHeader><CardTitle className="text-base">Status History</CardTitle></CardHeader>
+            <CardContent className="pt-0">
+              <StatusTimeline history={deal.history ?? []} />
+            </CardContent>
+          </Card>
+        </motion.div>
+
+        {/* Right: sidebar */}
+        <motion.div
+          initial={{ opacity: 0, x: 12 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ duration: 0.3, delay: 0.1 }}
+          className="space-y-6"
+        >
+          {user && (
+            <StatusActionCard
+              dealId={deal.id}
+              status={deal.status}
+              submitterId={deal.submitterId}
+              currentUserId={user.id}
+              isVendorAdmin={isVendorAdmin}
+            />
+          )}
+
+          {/* Metadata */}
+          <Card>
+            <CardHeader><CardTitle className="text-base">Deal Metadata</CardTitle></CardHeader>
+            <CardContent className="pt-0 space-y-4">
+              <InfoRow icon={<User className="h-4 w-4" />} label="Submitted By" value={deal.submitterId} />
+              <InfoRow
+                icon={<Calendar className="h-4 w-4" />}
+                label="Submitted Date"
+                value={format(parseISO(deal.createdAt), 'MMM d, yyyy')}
+              />
+              <InfoRow
+                icon={<Clock className="h-4 w-4" />}
+                label="Last Updated"
+                value={format(parseISO(deal.updatedAt), 'MMM d, yyyy h:mm a')}
+              />
+              {deal.reviewerId && (
+                <InfoRow icon={<User className="h-4 w-4" />} label="Reviewer" value={deal.reviewerId} />
               )}
             </CardContent>
           </Card>
-        </div>
+        </motion.div>
       </div>
     </div>
   );
