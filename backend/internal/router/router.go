@@ -65,6 +65,7 @@ func New(cfg *config.Config, pool *pgxpool.Pool, log zerolog.Logger) chi.Router 
 			r.With(middleware.RequireRole("vendor_admin")).Get("/", h.ListUsers)
 			r.Get("/{id}", h.GetUser)
 			r.Put("/{id}", h.UpdateUser)
+			r.Put("/{id}/password", h.UpdatePassword)
 			r.Delete("/{id}", h.DeleteUser)
 		})
 

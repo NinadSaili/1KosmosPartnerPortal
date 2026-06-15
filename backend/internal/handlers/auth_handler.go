@@ -318,6 +318,45 @@ func (h *Handler) DeleteUser(w http.ResponseWriter, r *http.Request) {
 }
 
 // ---------------------------------------------------------------------------
+// UpdatePassword — PUT /api/v1/users/{id}/password
+// ---------------------------------------------------------------------------
+
+// UpdatePassword handles PUT /api/v1/users/{id}/password.
+func (h *Handler) UpdatePassword(w http.ResponseWriter, r *http.Request) {
+	targetID := chi.URLParam(r, "id")
+	callerID := middleware.GetUserID(r)
+	callerRole := middleware.GetUserRole(r)
+
+	if callerID != targetID && callerRole != "vendor_admin" {
+		writeError(w, http.StatusForbidden, "forbidden", "you may only change your own password")
+		return
+	}
+
+	var body struct {
+		Password string `json:"password"`
+	}
+	if !decodeJSON(w, r, &body) {
+		return
+	}
+	if len(body.Password) < 8 {
+		writeError(w, http.StatusBadRequest, "validation_error", "password must be at least 8 characters")
+		return
+	}
+
+	// Forward the caller's Bearer token so Supabase updates the correct account.
+	accessToken := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
+	svc := h.authSvc()
+	if err := svc.CallSupabaseUpdatePassword(r.Context(), accessToken, body.Password); err != nil {
+		h.log.Error().Err(err).Str("user_id", targetID).Msg("update password failed")
+		writeError(w, http.StatusBadGateway, "supabase_error", "failed to update password")
+		return
+	}
+
+	h.auditLog.WriteAudit(r.Context(), callerID, "update", "password", targetID, nil)
+	writeJSON(w, http.StatusOK, map[string]string{"message": "password updated"})
+}
+
+// ---------------------------------------------------------------------------
 // ListUsers — GET /api/v1/users
 // ---------------------------------------------------------------------------
 

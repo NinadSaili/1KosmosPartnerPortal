@@ -306,3 +306,32 @@ func (s *AuthService) CallSupabaseRefresh(ctx context.Context, refreshToken stri
 	return out.AccessToken, out.RefreshToken, nil
 }
 
+// CallSupabaseUpdatePassword changes the authenticated user's password via the Supabase Auth API.
+// accessToken is the caller's current Supabase JWT.
+func (s *AuthService) CallSupabaseUpdatePassword(ctx context.Context, accessToken, newPassword string) error {
+	body, _ := json.Marshal(map[string]string{"password": newPassword})
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPut,
+		s.supabaseURL+"/auth/v1/user",
+		bytes.NewReader(body),
+	)
+	if err != nil {
+		return fmt.Errorf("supabase update password: build request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("apikey", s.anonKey)
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("supabase update password: http: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		raw, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("supabase update password: status %d: %s", resp.StatusCode, string(raw))
+	}
+	return nil
+}
+

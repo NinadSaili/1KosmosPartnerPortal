@@ -19,7 +19,7 @@ import {
   BadgeCheck,
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
-import { authApi, certApi, axiosInstance } from '@/lib/api';
+import { authApi, certApi } from '@/lib/api';
 import type { IssuedCertificate } from '@/types';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
@@ -269,7 +269,7 @@ export default function ProfilePage() {
   const handlePasswordSubmit = async (data: PasswordFormData) => {
     setPwApiError(null);
     try {
-      await axiosInstance.patch('/auth/me', { password: data.newPassword });
+      await authApi.updatePassword(user!.id, data.newPassword);
       toastSuccess('Password changed', 'Your password has been updated.');
       resetPw();
     } catch (err: unknown) {

@@ -77,7 +77,7 @@ export const axiosInstance: AxiosInstance = axios.create({
 let refreshPromise: Promise<string> | null = null;
 
 // ─── Request Interceptor ──────────────────────────────────────────────────────
-// Attaches JWT and converts camelCase body keys to snake_case for the backend.
+// Attaches JWT and converts camelCase body keys and query param keys to snake_case.
 
 axiosInstance.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
@@ -87,6 +87,9 @@ axiosInstance.interceptors.request.use(
     }
     if (config.data && !(config.data instanceof FormData)) {
       config.data = decamelizeKeys(config.data);
+    }
+    if (config.params) {
+      config.params = decamelizeKeys(config.params);
     }
     return config;
   },
@@ -226,6 +229,9 @@ export const authApi = {
 
   updateProfile: (userId: string, data: Partial<User>) =>
     axiosInstance.put<User>(`/users/${userId}`, data).then((r) => r.data),
+
+  updatePassword: (userId: string, password: string) =>
+    axiosInstance.put<{ message: string }>(`/users/${userId}/password`, { password }).then((r) => r.data),
 
   listUsers: (params?: { page?: number; pageSize?: number; orgId?: string }) =>
     axiosInstance.get<PaginatedResponse<User>>('/users', { params }).then((r) => r.data),
