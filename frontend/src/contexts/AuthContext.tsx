@@ -100,8 +100,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         // If access token is still valid, fetch profile
         if (!isTokenExpired(stored.accessToken)) {
           setTokens(stored);
-          const profile = await authApi.getProfile();
-          setUser(profile);
+          const payload = parseJwtPayload(stored.accessToken);
+          const userId = payload?.sub as string | undefined;
+          if (userId) {
+            const profile = await authApi.getProfile(userId);
+            setUser(profile as AuthUser);
+          }
           return;
         }
 
@@ -110,8 +114,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           const newTokens = await authApi.refresh(stored.refreshToken);
           storeTokens(newTokens);
           setTokens(newTokens);
-          const profile = await authApi.getProfile();
-          setUser(profile);
+          const payload = parseJwtPayload(newTokens.accessToken);
+          const userId = payload?.sub as string | undefined;
+          if (userId) {
+            const profile = await authApi.getProfile(userId);
+            setUser(profile as AuthUser);
+          }
           return;
         }
 

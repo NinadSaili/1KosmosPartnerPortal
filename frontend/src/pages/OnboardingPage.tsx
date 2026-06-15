@@ -157,12 +157,12 @@ function ProfileSection({ onComplete }: ProfileSectionProps) {
 
   const onSubmit = async (data: ProfileFormData) => {
     setApiError(null);
+    if (!user?.id) return;
     try {
-      const updated = await authApi.updateProfile({
+      const updated = await authApi.updateProfile(user.id, {
         fullName: data.fullName,
         title: data.title ?? null,
         phone: data.phone ?? null,
-        profileCompleted: true,
       });
       updateUser(updated);
       setSaved(true);

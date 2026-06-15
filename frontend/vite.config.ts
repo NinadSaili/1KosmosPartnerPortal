@@ -19,8 +19,6 @@ export default defineConfig({
       "/api": {
         target: "http://localhost:8080",
         changeOrigin: true,
-        // Strip the /api prefix before forwarding to the backend
-      
       },
     },
   },

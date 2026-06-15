@@ -84,7 +84,7 @@ func New(cfg *config.Config, pool *pgxpool.Pool, log zerolog.Logger) chi.Router 
 
 		// Dashboard
 		r.Route("/dashboard", func(r chi.Router) {
-			r.With(middleware.RequireRole("vendor_admin", "partner_admin")).Get("/stats", h.GetDashboardStats)
+			r.Get("/stats", h.GetDashboardStats)
 			r.With(middleware.RequireRole("vendor_admin", "partner_admin")).Get("/team-progress", h.GetTeamProgress)
 		})
 

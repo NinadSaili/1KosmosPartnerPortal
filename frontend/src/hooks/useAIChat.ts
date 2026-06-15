@@ -19,9 +19,7 @@ export interface AIMessage {
 
 // ─── Constants ─────────────────────────────────────────────────────────────────
 
-const BASE_URL =
-  (import.meta as Record<string, unknown> & { env: Record<string, string> }).env.VITE_API_URL ||
-  '/api/v1';
+const BASE_URL = import.meta.env.VITE_API_URL ?? '/api/v1';
 const ACCESS_TOKEN_KEY = 'pp_access_token';
 const SESSION_STORAGE_KEY = 'ai_chat_messages';
 

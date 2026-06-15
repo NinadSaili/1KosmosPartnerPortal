@@ -6,6 +6,7 @@ import {
   type UseMutationResult,
 } from '@tanstack/react-query';
 import { courseApi, type CourseFilters } from '../lib/api';
+import { useAuthContext } from '../contexts/AuthContext';
 import type { Course, Lesson, PaginatedResponse } from '../types';
 
 // ─── Query keys ───────────────────────────────────────────────────────────────
@@ -53,10 +54,11 @@ export function useCourseLessons(courseId: string): UseQueryResult<Lesson[]> {
 export function useCourseProgress(
   courseId: string,
 ): UseQueryResult<{ progressPct: number; completedLessons: string[] }> {
+  const { user } = useAuthContext();
   return useQuery({
     queryKey: courseKeys.progress(courseId),
-    queryFn: () => courseApi.getProgress(courseId),
-    enabled: Boolean(courseId),
+    queryFn: () => courseApi.getProgress(courseId, user!.id),
+    enabled: Boolean(courseId) && Boolean(user?.id),
     staleTime: 2 * 60 * 1000,
   });
 }

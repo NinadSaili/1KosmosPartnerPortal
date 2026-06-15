@@ -54,10 +54,11 @@ type PasswordFormData = z.infer<typeof passwordSchema>;
 interface AvatarSectionProps {
   avatarUrl: string | null;
   fullName: string;
+  userId: string;
   onAvatarChange: (url: string) => void;
 }
 
-function AvatarSection({ avatarUrl, fullName, onAvatarChange }: AvatarSectionProps) {
+function AvatarSection({ avatarUrl, fullName, userId, onAvatarChange }: AvatarSectionProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
 
@@ -74,10 +75,10 @@ function AvatarSection({ avatarUrl, fullName, onAvatarChange }: AvatarSectionPro
     if (!file) return;
     setUploading(true);
     try {
-      // In a real implementation this would upload to Supabase storage
-      // and return a public URL. Here we create a local object URL as placeholder.
       const objectUrl = URL.createObjectURL(file);
-      await authApi.updateProfile({ avatarUrl: objectUrl });
+      if (userId) {
+        await authApi.updateProfile(userId, { avatarUrl: objectUrl });
+      }
       onAvatarChange(objectUrl);
     } catch {
       // swallow — parent toast handles it
@@ -237,7 +238,7 @@ export default function ProfilePage() {
 
   const profileMutation = useMutation({
     mutationFn: (data: ProfileFormData) =>
-      authApi.updateProfile({
+      authApi.updateProfile(user!.id, {
         fullName: data.fullName,
         title: data.title ?? null,
         phone: data.phone ?? null,
@@ -295,6 +296,7 @@ export default function ProfilePage() {
               <AvatarSection
                 avatarUrl={localAvatarUrl}
                 fullName={user.fullName}
+                userId={user.id}
                 onAvatarChange={(url) => {
                   setLocalAvatarUrl(url);
                   updateUser({ avatarUrl: url });

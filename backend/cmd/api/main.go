@@ -18,7 +18,7 @@ import (
 )
 
 func main() {
-	// Load .env file if it exists.
+	// Load .env file if present (ignored in production where env vars are injected).
 	_ = godotenv.Load()
 
 	// Load configuration from environment variables.

@@ -30,39 +30,41 @@ type Organization struct {
 
 // User represents a portal user (partner rep, partner admin, or vendor admin).
 type User struct {
-	ID             uuid.UUID  `json:"id"`
-	OrganizationID *uuid.UUID `json:"organization_id,omitempty"`
-	Email          string     `json:"email"`
-	FullName       string     `json:"full_name"`
-	Role           string     `json:"role"`
-	AvatarURL      *string    `json:"avatar_url,omitempty"`
-	Title          *string    `json:"title,omitempty"`
-	Phone          *string    `json:"phone,omitempty"`
-	IsActive       bool       `json:"is_active"`
-	LastLoginAt    *time.Time `json:"last_login_at,omitempty"`
-	CreatedAt      time.Time  `json:"created_at"`
-	UpdatedAt      time.Time  `json:"updated_at"`
-	DeletedAt      *time.Time `json:"deleted_at,omitempty"`
+	ID               uuid.UUID  `json:"id"`
+	OrganizationID   *uuid.UUID `json:"organization_id,omitempty"`
+	Email            string     `json:"email"`
+	FullName         string     `json:"full_name"`
+	Role             string     `json:"role"`
+	AvatarURL        *string    `json:"avatar_url,omitempty"`
+	Title            *string    `json:"title,omitempty"`
+	Phone            *string    `json:"phone,omitempty"`
+	IsActive         bool       `json:"is_active"`
+	ProfileCompleted bool       `json:"profile_completed"`
+	LastLoginAt      *time.Time `json:"last_login_at,omitempty"`
+	CreatedAt        time.Time  `json:"created_at"`
+	UpdatedAt        time.Time  `json:"updated_at"`
 }
 
 // OnboardingChecklist tracks the onboarding progress for an organization.
+// Field names match the database column names exactly.
 type OnboardingChecklist struct {
-	ID                       uuid.UUID  `json:"id"`
-	OrganizationID           uuid.UUID  `json:"organization_id"`
-	ProfileCompleted         bool       `json:"profile_completed"`
-	ProfileCompletedAt       *time.Time `json:"profile_completed_at,omitempty"`
-	ContractSigned           bool       `json:"contract_signed"`
-	ContractSignedAt         *time.Time `json:"contract_signed_at,omitempty"`
-	TrainingCompleted        bool       `json:"training_completed"`
-	TrainingCompletedAt      *time.Time `json:"training_completed_at,omitempty"`
-	CertificationEarned      bool       `json:"certification_earned"`
-	CertificationEarnedAt    *time.Time `json:"certification_earned_at,omitempty"`
-	PortalAccessGranted      bool       `json:"portal_access_granted"`
-	PortalAccessGrantedAt    *time.Time `json:"portal_access_granted_at,omitempty"`
-	FirstDealRegistered      bool       `json:"first_deal_registered"`
-	FirstDealRegisteredAt    *time.Time `json:"first_deal_registered_at,omitempty"`
-	CompletionPercentage     int        `json:"completion_percentage"`
-	UpdatedAt                time.Time  `json:"updated_at"`
+	ID                            uuid.UUID  `json:"id"`
+	OrganizationID                uuid.UUID  `json:"organization_id"`
+	MndaSigned                    bool       `json:"mnda_signed"`
+	MndaSignedAt                  *time.Time `json:"mnda_signed_at,omitempty"`
+	ResellerAgreementSigned       bool       `json:"reseller_agreement_signed"`
+	ResellerAgreementSignedAt     *time.Time `json:"reseller_agreement_signed_at,omitempty"`
+	AccountMappingDone            bool       `json:"account_mapping_done"`
+	AccountMappingDoneAt          *time.Time `json:"account_mapping_done_at,omitempty"`
+	SalesEnablementComplete       bool       `json:"sales_enablement_complete"`
+	SalesEnablementCompleteAt     *time.Time `json:"sales_enablement_complete_at,omitempty"`
+	TechnicalEnablementComplete   bool       `json:"technical_enablement_complete"`
+	TechnicalEnablementCompleteAt *time.Time `json:"technical_enablement_complete_at,omitempty"`
+	UpdatedBy                     *uuid.UUID `json:"updated_by,omitempty"`
+	CreatedAt                     time.Time  `json:"created_at"`
+	UpdatedAt                     time.Time  `json:"updated_at"`
+	// ReadyToDealRegister is computed, not stored.
+	ReadyToDealRegister bool `json:"ready_to_deal_register"`
 }
 
 // Course is a training course available in the portal.

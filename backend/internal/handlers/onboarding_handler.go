@@ -78,11 +78,11 @@ func (h *Handler) UpdateOnboarding(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var body struct {
-		ProfileCompleted    *bool `json:"profile_completed,omitempty"`
-		ContractSigned      *bool `json:"contract_signed,omitempty"`
-		TrainingCompleted   *bool `json:"training_completed,omitempty"`
-		CertificationEarned *bool `json:"certification_earned,omitempty"`
-		PortalAccessGranted *bool `json:"portal_access_granted,omitempty"`
+		MndaSigned                  *bool `json:"mnda_signed,omitempty"`
+		ResellerAgreementSigned     *bool `json:"reseller_agreement_signed,omitempty"`
+		AccountMappingDone          *bool `json:"account_mapping_done,omitempty"`
+		SalesEnablementComplete     *bool `json:"sales_enablement_complete,omitempty"`
+		TechnicalEnablementComplete *bool `json:"technical_enablement_complete,omitempty"`
 	}
 	if !decodeJSON(w, r, &body) {
 		return
@@ -90,11 +90,11 @@ func (h *Handler) UpdateOnboarding(w http.ResponseWriter, r *http.Request) {
 
 	svc := h.onboardingSvc()
 	updated, err := svc.UpdateChecklist(r.Context(), orgID, services.UpdateChecklistRequest{
-		ProfileCompleted:    body.ProfileCompleted,
-		ContractSigned:      body.ContractSigned,
-		TrainingCompleted:   body.TrainingCompleted,
-		CertificationEarned: body.CertificationEarned,
-		PortalAccessGranted: body.PortalAccessGranted,
+		MndaSigned:                  body.MndaSigned,
+		ResellerAgreementSigned:     body.ResellerAgreementSigned,
+		AccountMappingDone:          body.AccountMappingDone,
+		SalesEnablementComplete:     body.SalesEnablementComplete,
+		TechnicalEnablementComplete: body.TechnicalEnablementComplete,
 	})
 	if err != nil {
 		if errors.Is(err, repositories.ErrNotFound) {

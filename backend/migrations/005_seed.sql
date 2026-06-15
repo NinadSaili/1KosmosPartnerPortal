@@ -24,18 +24,18 @@ BEGIN;
 --   sales-cert          : 'ce000000-0000-0000-0000-000000000001'
 --   technical-cert      : 'ce000000-0000-0000-0000-000000000002'
 -- Resources (r1–r6)
---   datasheet           : 're000000-0000-0000-0000-000000000001'
---   battlecard          : 're000000-0000-0000-0000-000000000002'
---   demo_script         : 're000000-0000-0000-0000-000000000003'
---   competitive         : 're000000-0000-0000-0000-000000000004'
---   case_study          : 're000000-0000-0000-0000-000000000005'
---   poc_success_crit    : 're000000-0000-0000-0000-000000000006'
+--   datasheet           : 'f1000000-0000-0000-0000-000000000001'
+--   battlecard          : 'f1000000-0000-0000-0000-000000000002'
+--   demo_script         : 'f1000000-0000-0000-0000-000000000003'
+--   competitive         : 'f1000000-0000-0000-0000-000000000004'
+--   case_study          : 'f1000000-0000-0000-0000-000000000005'
+--   poc_success_crit    : 'f1000000-0000-0000-0000-000000000006'
 -- Deals
 --   meridian (approved) : 'd0000000-0000-0000-0000-000000000001'
 --   pacific  (submitted): 'd0000000-0000-0000-0000-000000000002'
 -- Announcements
---   platform 4.2        : 'an000000-0000-0000-0000-000000000001'
---   battlecard news     : 'an000000-0000-0000-0000-000000000002'
+--   platform 4.2        : 'ab000000-0000-0000-0000-000000000001'
+--   battlecard news     : 'ab000000-0000-0000-0000-000000000002'
 
 -- ===========================================================================
 -- 1. ORGANIZATION
@@ -321,7 +321,7 @@ VALUES
 INSERT INTO resources (id, title, description, type, language, file_url, version, is_published, uploaded_by, created_at, updated_at)
 VALUES
     (
-        're000000-0000-0000-0000-000000000001',
+        'f1000000-0000-0000-0000-000000000001',
         '1Kosmos Platform Datasheet',
         'Overview of the 1Kosmos BlockID platform, capabilities, and key differentiators.',
         'datasheet',
@@ -333,7 +333,7 @@ VALUES
         now(), now()
     ),
     (
-        're000000-0000-0000-0000-000000000002',
+        'f1000000-0000-0000-0000-000000000002',
         'vs Microsoft Entra ID Battlecard',
         'Head-to-head comparison of 1Kosmos BlockID vs Microsoft Entra ID for sales conversations.',
         'battlecard',
@@ -345,7 +345,7 @@ VALUES
         now(), now()
     ),
     (
-        're000000-0000-0000-0000-000000000003',
+        'f1000000-0000-0000-0000-000000000003',
         'Standard 45-Minute Demo Script',
         'Step-by-step script for delivering the standard 1Kosmos platform demonstration to enterprise prospects.',
         'demo_script',
@@ -357,7 +357,7 @@ VALUES
         now(), now()
     ),
     (
-        're000000-0000-0000-0000-000000000004',
+        'f1000000-0000-0000-0000-000000000004',
         'CrowdStrike vs 1Kosmos Competitive Analysis',
         'Detailed competitive analysis comparing CrowdStrike Falcon Identity Protection and 1Kosmos BlockID.',
         'competitive_comparison',
@@ -369,7 +369,7 @@ VALUES
         now(), now()
     ),
     (
-        're000000-0000-0000-0000-000000000005',
+        'f1000000-0000-0000-0000-000000000005',
         'Financial Services Identity Case Study',
         'How a Tier-1 financial institution deployed 1Kosmos BlockID to eliminate password-based breaches.',
         'case_study',
@@ -381,7 +381,7 @@ VALUES
         now(), now()
     ),
     (
-        're000000-0000-0000-0000-000000000006',
+        'f1000000-0000-0000-0000-000000000006',
         'Enterprise POC Success Criteria Checklist',
         'Structured checklist for scoping, executing, and evaluating a 1Kosmos proof of concept engagement.',
         'poc_success_criteria',
@@ -396,12 +396,12 @@ VALUES
 -- Resource vertical tags
 INSERT INTO resource_vertical_tags (resource_id, tag)
 VALUES
-    ('re000000-0000-0000-0000-000000000001', 'general'),
-    ('re000000-0000-0000-0000-000000000002', 'general'),
-    ('re000000-0000-0000-0000-000000000003', 'general'),
-    ('re000000-0000-0000-0000-000000000004', 'general'),
-    ('re000000-0000-0000-0000-000000000005', 'financial_services'),
-    ('re000000-0000-0000-0000-000000000006', 'general');
+    ('f1000000-0000-0000-0000-000000000001', 'general'),
+    ('f1000000-0000-0000-0000-000000000002', 'general'),
+    ('f1000000-0000-0000-0000-000000000003', 'general'),
+    ('f1000000-0000-0000-0000-000000000004', 'general'),
+    ('f1000000-0000-0000-0000-000000000005', 'financial_services'),
+    ('f1000000-0000-0000-0000-000000000006', 'general');
 
 -- ===========================================================================
 -- 7. DEALS
@@ -469,7 +469,7 @@ INSERT INTO announcements (
 )
 VALUES
     (
-        'an000000-0000-0000-0000-000000000001',
+        'ab000000-0000-0000-0000-000000000001',
         '1Kosmos Platform 4.2 Released',
         '<h2>Platform 4.2 Highlights</h2><ul><li>Enhanced FIDO2 device attestation</li><li>New AdminX dashboard with real-time analytics</li><li>SCIM 2.0 provisioning for major IdPs</li></ul><p>Update your demo tenants before your next customer engagement.</p>',
         'product_update',
@@ -481,7 +481,7 @@ VALUES
         now() - interval '7 days'
     ),
     (
-        'an000000-0000-0000-0000-000000000002',
+        'ab000000-0000-0000-0000-000000000002',
         'New Competitive Battlecard: vs CrowdStrike Falcon Identity',
         '<p>The updated battlecard covers the latest CrowdStrike Falcon Identity features and our differentiation on biometric-grade authentication. Available in the Resource Center.</p>',
         'vendor_news',

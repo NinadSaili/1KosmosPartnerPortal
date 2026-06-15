@@ -25,9 +25,45 @@ import type {
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const BASE_URL = (import.meta as Record<string, unknown> & { env: Record<string, string> }).env.VITE_API_URL || '/api/v1';
+const BASE_URL = import.meta.env.VITE_API_URL ?? '/api/v1';
 const ACCESS_TOKEN_KEY = 'pp_access_token';
 const REFRESH_TOKEN_KEY = 'pp_refresh_token';
+
+// ─── Key transform utilities ──────────────────────────────────────────────────
+
+function snakeToCamelKey(s: string): string {
+  return s.replace(/_([a-z])/g, (_, c: string) => c.toUpperCase());
+}
+
+function camelToSnakeKey(s: string): string {
+  return s.replace(/[A-Z]/g, (c) => `_${c.toLowerCase()}`);
+}
+
+function camelizeKeys(data: unknown): unknown {
+  if (Array.isArray(data)) return data.map(camelizeKeys);
+  if (data !== null && typeof data === 'object') {
+    return Object.fromEntries(
+      Object.entries(data as Record<string, unknown>).map(([k, v]) => [
+        snakeToCamelKey(k),
+        camelizeKeys(v),
+      ]),
+    );
+  }
+  return data;
+}
+
+function decamelizeKeys(data: unknown): unknown {
+  if (Array.isArray(data)) return data.map(decamelizeKeys);
+  if (data !== null && typeof data === 'object' && !(data instanceof FormData)) {
+    return Object.fromEntries(
+      Object.entries(data as Record<string, unknown>).map(([k, v]) => [
+        camelToSnakeKey(k),
+        decamelizeKeys(v),
+      ]),
+    );
+  }
+  return data;
+}
 
 // ─── Axios Instance ───────────────────────────────────────────────────────────
 
@@ -41,6 +77,7 @@ export const axiosInstance: AxiosInstance = axios.create({
 let refreshPromise: Promise<string> | null = null;
 
 // ─── Request Interceptor ──────────────────────────────────────────────────────
+// Attaches JWT and converts camelCase body keys to snake_case for the backend.
 
 axiosInstance.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
@@ -48,12 +85,24 @@ axiosInstance.interceptors.request.use(
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
+    if (config.data && !(config.data instanceof FormData)) {
+      config.data = decamelizeKeys(config.data);
+    }
     return config;
   },
   (error) => Promise.reject(error),
 );
 
-// ─── Response Interceptor ─────────────────────────────────────────────────────
+// ─── Response Interceptors ────────────────────────────────────────────────────
+// 1. Camelize all response keys so TypeScript camelCase types are satisfied.
+// 2. Retry 401 errors with a fresh access token.
+
+axiosInstance.interceptors.response.use(
+  (response) => {
+    response.data = camelizeKeys(response.data);
+    return response;
+  },
+);
 
 axiosInstance.interceptors.response.use(
   (response) => response,
@@ -72,10 +121,14 @@ axiosInstance.interceptors.response.use(
       try {
         if (!refreshPromise) {
           refreshPromise = axios
-            .post<{ accessToken: string }>(`${BASE_URL}/auth/refresh`, { refreshToken })
+            .post<{ access_token: string; refresh_token: string }>(
+              `${BASE_URL}/auth/refresh`,
+              { refresh_token: refreshToken },
+            )
             .then((res) => {
-              const newToken = res.data.accessToken;
+              const newToken = res.data.access_token;
               localStorage.setItem(ACCESS_TOKEN_KEY, newToken);
+              localStorage.setItem(REFRESH_TOKEN_KEY, res.data.refresh_token);
               refreshPromise = null;
               return newToken;
             })
@@ -124,33 +177,57 @@ export interface RegisterRequest {
   inviteToken?: string;
 }
 
-export const authApi = {
-  login: (data: LoginRequest) =>
-    axiosInstance.post<{ tokens: AuthTokens; user: AuthUser }>('/auth/login', data).then((r) => r.data),
+// Shape after camelization by the response interceptor
+interface LoginResponseCamel {
+  accessToken: string;
+  refreshToken: string;
+  expiresIn: number;
+  user: AuthUser;
+}
 
- /* register: (data: RegisterRequest) =>
-    axiosInstance.post<{ tokens: AuthTokens; user: AuthUser }>('/auth/register', data).then((r) => r.data),
-*/
-register: (data: RegisterRequest) =>
-  axiosInstance.post<{ tokens: AuthTokens; user: AuthUser }>('/auth/register', {
-    email: data.email,
-    password: data.password,
-    full_name: data.fullName,
-  }).then((r) => r.data),
-  
+export const authApi = {
+  login: async (data: LoginRequest): Promise<{ tokens: AuthTokens; user: AuthUser }> => {
+    // Body is decamelized by request interceptor (email/password have no uppercase, unchanged).
+    const raw = await axiosInstance
+      .post<LoginResponseCamel>('/auth/login', data)
+      .then((r) => r.data);
+    return {
+      tokens: { accessToken: raw.accessToken, refreshToken: raw.refreshToken },
+      user: raw.user,
+    };
+  },
+
+  register: async (data: RegisterRequest): Promise<{ tokens: AuthTokens; user: AuthUser }> => {
+    // Send registration data; fullName → full_name via request interceptor.
+    await axiosInstance.post('/auth/register', {
+      email: data.email,
+      password: data.password,
+      fullName: data.fullName,
+    });
+    // Backend returns only the User; follow up with login to obtain tokens.
+    return authApi.login({ email: data.email, password: data.password });
+  },
   magicLink: (email: string) =>
     axiosInstance.post<{ message: string }>('/auth/magic-link', { email }).then((r) => r.data),
 
-  refresh: (refreshToken: string) =>
-    axiosInstance.post<AuthTokens>('/auth/refresh', { refreshToken }).then((r) => r.data),
+  refresh: async (refreshToken: string): Promise<AuthTokens> => {
+    // Use raw axios to avoid the camelizeKeys interceptor (we read raw snake_case).
+    const raw = await axios
+      .post<{ access_token: string; refresh_token: string }>(
+        `${BASE_URL}/auth/refresh`,
+        { refresh_token: refreshToken },
+      )
+      .then((r) => r.data);
+    return { accessToken: raw.access_token, refreshToken: raw.refresh_token };
+  },
 
-  getProfile: () =>
-    axiosInstance.get<AuthUser>('/auth/me').then((r) => r.data),
+  getProfile: (userId: string) =>
+    axiosInstance.get<User>(`/users/${userId}`).then((r) => r.data),
 
-  updateProfile: (data: Partial<User>) =>
-    axiosInstance.patch<AuthUser>('/auth/me', data).then((r) => r.data),
+  updateProfile: (userId: string, data: Partial<User>) =>
+    axiosInstance.put<User>(`/users/${userId}`, data).then((r) => r.data),
 
-  listUsers: (params?: { page?: number; pageSize?: number; organizationId?: string }) =>
+  listUsers: (params?: { page?: number; pageSize?: number; orgId?: string }) =>
     axiosInstance.get<PaginatedResponse<User>>('/users', { params }).then((r) => r.data),
 };
 
@@ -187,11 +264,18 @@ export const courseApi = {
   createLesson: (courseId: string, data: Partial<Lesson>) =>
     axiosInstance.post<Lesson>(`/courses/${courseId}/lessons`, data).then((r) => r.data),
 
+  // Body { lessonId } → decamelized → { lesson_id } as backend expects.
   completeLesson: (courseId: string, lessonId: string) =>
-    axiosInstance.post<{ progressPct: number }>(`/courses/${courseId}/lessons/${lessonId}/complete`).then((r) => r.data),
+    axiosInstance
+      .post<{ progressPct: number }>(`/courses/${courseId}/progress/complete-lesson`, { lessonId })
+      .then((r) => r.data),
 
-  getProgress: (courseId: string) =>
-    axiosInstance.get<{ progressPct: number; completedLessons: string[] }>(`/courses/${courseId}/progress`).then((r) => r.data),
+  getProgress: (courseId: string, userId: string) =>
+    axiosInstance
+      .get<{ progressPct: number; completedLessons: string[] }>(
+        `/courses/${courseId}/progress/${userId}`,
+      )
+      .then((r) => r.data),
 };
 
 // ─── Certification API ────────────────────────────────────────────────────────
@@ -273,8 +357,9 @@ export const dealApi = {
   update: (id: string, data: Partial<Deal>) =>
     axiosInstance.patch<Deal>(`/deals/${id}`, data).then((r) => r.data),
 
+  // PATCH /deals/{id}/status (was incorrectly POST)
   updateStatus: (id: string, status: string, comment?: string) =>
-    axiosInstance.post<Deal>(`/deals/${id}/status`, { status, comment }).then((r) => r.data),
+    axiosInstance.patch<Deal>(`/deals/${id}/status`, { status, comment }).then((r) => r.data),
 };
 
 // ─── Announcement API ─────────────────────────────────────────────────────────
@@ -297,8 +382,9 @@ export const announcementApi = {
   create: (data: Partial<Announcement>) =>
     axiosInstance.post<Announcement>('/announcements', data).then((r) => r.data),
 
+  // PUT (not PATCH) to match backend router
   update: (id: string, data: Partial<Announcement>) =>
-    axiosInstance.patch<Announcement>(`/announcements/${id}`, data).then((r) => r.data),
+    axiosInstance.put<Announcement>(`/announcements/${id}`, data).then((r) => r.data),
 
   delete: (id: string) =>
     axiosInstance.delete(`/announcements/${id}`).then((r) => r.data),
@@ -346,6 +432,7 @@ export const onboardingApi = {
   get: (organizationId: string) =>
     axiosInstance.get<OnboardingChecklist>(`/onboarding/${organizationId}`).then((r) => r.data),
 
+  // PUT (not PATCH) to match backend router; keys decamelized by request interceptor
   update: (organizationId: string, data: Partial<OnboardingChecklist>) =>
-    axiosInstance.patch<OnboardingChecklist>(`/onboarding/${organizationId}`, data).then((r) => r.data),
+    axiosInstance.put<OnboardingChecklist>(`/onboarding/${organizationId}`, data).then((r) => r.data),
 };

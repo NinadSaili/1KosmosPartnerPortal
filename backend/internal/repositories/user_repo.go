@@ -23,12 +23,24 @@ func NewUserRepository(db *pgxpool.Pool) *UserRepository {
 	return &UserRepository{db: db}
 }
 
+const userSelectCols = `id, organization_id, email, full_name, role, avatar_url, title, phone, is_active, profile_completed, last_login_at, created_at, updated_at`
+
+func scanUser(row interface{ Scan(...any) error }) (*models.User, error) {
+	var u models.User
+	err := row.Scan(
+		&u.ID, &u.OrganizationID, &u.Email, &u.FullName, &u.Role,
+		&u.AvatarURL, &u.Title, &u.Phone, &u.IsActive, &u.ProfileCompleted,
+		&u.LastLoginAt, &u.CreatedAt, &u.UpdatedAt,
+	)
+	return &u, err
+}
+
 // CreateUser inserts a new user record and returns the created user.
 func (r *UserRepository) CreateUser(ctx context.Context, user *models.User) (*models.User, error) {
 	const q = `
 		INSERT INTO users (id, organization_id, email, full_name, role, avatar_url, title, phone, is_active, created_at, updated_at)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-		RETURNING id, organization_id, email, full_name, role, avatar_url, title, phone, is_active, last_login_at, created_at, updated_at, deleted_at`
+		RETURNING ` + userSelectCols
 
 	if user.ID == uuid.Nil {
 		user.ID = uuid.New()
@@ -51,70 +63,39 @@ func (r *UserRepository) CreateUser(ctx context.Context, user *models.User) (*mo
 		user.UpdatedAt,
 	)
 
-	var created models.User
-	err := row.Scan(
-		&created.ID,
-		&created.OrganizationID,
-		&created.Email,
-		&created.FullName,
-		&created.Role,
-		&created.AvatarURL,
-		&created.Title,
-		&created.Phone,
-		&created.IsActive,
-		&created.LastLoginAt,
-		&created.CreatedAt,
-		&created.UpdatedAt,
-		&created.DeletedAt,
-	)
+	created, err := scanUser(row)
 	if err != nil {
 		return nil, fmt.Errorf("create user: %w", err)
 	}
-	return &created, nil
+	return created, nil
 }
 
 // GetUserByID fetches a user by their UUID.
 func (r *UserRepository) GetUserByID(ctx context.Context, id string) (*models.User, error) {
-	const q = `
-		SELECT id, organization_id, email, full_name, role, avatar_url, title, phone, is_active, last_login_at, created_at, updated_at, deleted_at
-		FROM users
-		WHERE id = $1 AND deleted_at IS NULL`
+	q := `SELECT ` + userSelectCols + ` FROM users WHERE id = $1 AND is_active = true`
 
-	var u models.User
-	err := r.db.QueryRow(ctx, q, id).Scan(
-		&u.ID, &u.OrganizationID, &u.Email, &u.FullName, &u.Role,
-		&u.AvatarURL, &u.Title, &u.Phone, &u.IsActive, &u.LastLoginAt,
-		&u.CreatedAt, &u.UpdatedAt, &u.DeletedAt,
-	)
+	u, err := scanUser(r.db.QueryRow(ctx, q, id))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrNotFound
 		}
 		return nil, fmt.Errorf("get user by id: %w", err)
 	}
-	return &u, nil
+	return u, nil
 }
 
 // GetUserByEmail fetches a user by their email address.
 func (r *UserRepository) GetUserByEmail(ctx context.Context, email string) (*models.User, error) {
-	const q = `
-		SELECT id, organization_id, email, full_name, role, avatar_url, title, phone, is_active, last_login_at, created_at, updated_at, deleted_at
-		FROM users
-		WHERE email = $1 AND deleted_at IS NULL`
+	q := `SELECT ` + userSelectCols + ` FROM users WHERE email = $1 AND is_active = true`
 
-	var u models.User
-	err := r.db.QueryRow(ctx, q, email).Scan(
-		&u.ID, &u.OrganizationID, &u.Email, &u.FullName, &u.Role,
-		&u.AvatarURL, &u.Title, &u.Phone, &u.IsActive, &u.LastLoginAt,
-		&u.CreatedAt, &u.UpdatedAt, &u.DeletedAt,
-	)
+	u, err := scanUser(r.db.QueryRow(ctx, q, email))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrNotFound
 		}
 		return nil, fmt.Errorf("get user by email: %w", err)
 	}
-	return &u, nil
+	return u, nil
 }
 
 // UpdateUser performs a dynamic UPDATE on the users table using the provided
@@ -137,29 +118,22 @@ func (r *UserRepository) UpdateUser(ctx context.Context, id string, updates map[
 	i++
 	args = append(args, id)
 
-	q := fmt.Sprintf(`
-		UPDATE users SET %s WHERE id = $%d AND deleted_at IS NULL
-		RETURNING id, organization_id, email, full_name, role, avatar_url, title, phone, is_active, last_login_at, created_at, updated_at, deleted_at`,
+	q := fmt.Sprintf(`UPDATE users SET %s WHERE id = $%d RETURNING `+userSelectCols,
 		strings.Join(setClauses, ", "), i)
 
-	var u models.User
-	err := r.db.QueryRow(ctx, q, args...).Scan(
-		&u.ID, &u.OrganizationID, &u.Email, &u.FullName, &u.Role,
-		&u.AvatarURL, &u.Title, &u.Phone, &u.IsActive, &u.LastLoginAt,
-		&u.CreatedAt, &u.UpdatedAt, &u.DeletedAt,
-	)
+	u, err := scanUser(r.db.QueryRow(ctx, q, args...))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrNotFound
 		}
 		return nil, fmt.Errorf("update user: %w", err)
 	}
-	return &u, nil
+	return u, nil
 }
 
 // ListUsers returns a paginated list of users, optionally filtered by orgID and role.
 func (r *UserRepository) ListUsers(ctx context.Context, orgID *string, role *string, offset, limit int) ([]models.User, int, error) {
-	conditions := []string{"deleted_at IS NULL"}
+	conditions := []string{}
 	args := []any{}
 	argIdx := 1
 
@@ -174,7 +148,10 @@ func (r *UserRepository) ListUsers(ctx context.Context, orgID *string, role *str
 		argIdx++
 	}
 
-	where := "WHERE " + strings.Join(conditions, " AND ")
+	where := ""
+	if len(conditions) > 0 {
+		where = "WHERE " + strings.Join(conditions, " AND ")
+	}
 
 	countQ := fmt.Sprintf("SELECT COUNT(*) FROM users %s", where)
 	var total int
@@ -183,11 +160,8 @@ func (r *UserRepository) ListUsers(ctx context.Context, orgID *string, role *str
 	}
 
 	listArgs := append(args, limit, offset)
-	listQ := fmt.Sprintf(`
-		SELECT id, organization_id, email, full_name, role, avatar_url, title, phone, is_active, last_login_at, created_at, updated_at, deleted_at
-		FROM users %s
-		ORDER BY created_at DESC
-		LIMIT $%d OFFSET $%d`, where, argIdx, argIdx+1)
+	listQ := fmt.Sprintf(`SELECT `+userSelectCols+` FROM users %s ORDER BY created_at DESC LIMIT $%d OFFSET $%d`,
+		where, argIdx, argIdx+1)
 
 	rows, err := r.db.Query(ctx, listQ, listArgs...)
 	if err != nil {
@@ -197,15 +171,11 @@ func (r *UserRepository) ListUsers(ctx context.Context, orgID *string, role *str
 
 	var users []models.User
 	for rows.Next() {
-		var u models.User
-		if err := rows.Scan(
-			&u.ID, &u.OrganizationID, &u.Email, &u.FullName, &u.Role,
-			&u.AvatarURL, &u.Title, &u.Phone, &u.IsActive, &u.LastLoginAt,
-			&u.CreatedAt, &u.UpdatedAt, &u.DeletedAt,
-		); err != nil {
+		u, err := scanUser(rows)
+		if err != nil {
 			return nil, 0, fmt.Errorf("scan user row: %w", err)
 		}
-		users = append(users, u)
+		users = append(users, *u)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, 0, fmt.Errorf("iterate users: %w", err)
@@ -213,9 +183,9 @@ func (r *UserRepository) ListUsers(ctx context.Context, orgID *string, role *str
 	return users, total, nil
 }
 
-// DeleteUser soft-deletes a user by setting deleted_at.
+// DeleteUser deactivates a user by setting is_active = false.
 func (r *UserRepository) DeleteUser(ctx context.Context, id string) error {
-	const q = `UPDATE users SET deleted_at = $1, updated_at = $1 WHERE id = $2 AND deleted_at IS NULL`
+	const q = `UPDATE users SET is_active = false, updated_at = $1 WHERE id = $2 AND is_active = true`
 	ct, err := r.db.Exec(ctx, q, time.Now().UTC(), id)
 	if err != nil {
 		return fmt.Errorf("delete user: %w", err)
