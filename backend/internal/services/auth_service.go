@@ -168,7 +168,10 @@ type supabaseSignupRequest struct {
 }
 
 type supabaseSignupResponse struct {
-	ID string `json:"id"`
+	ID   string `json:"id"`
+	User *struct {
+		ID string `json:"id"`
+	} `json:"user"`
 }
 
 // CallSupabaseRegister creates a user in Supabase auth and returns the new user UUID.
@@ -192,6 +195,7 @@ func (s *AuthService) CallSupabaseRegister(ctx context.Context, email, password 
 	defer resp.Body.Close()
 
 	raw, _ := io.ReadAll(resp.Body)
+
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return "", fmt.Errorf("supabase register: unexpected status %d: %s", resp.StatusCode, string(raw))
 	}
@@ -200,10 +204,17 @@ func (s *AuthService) CallSupabaseRegister(ctx context.Context, email, password 
 	if err := json.Unmarshal(raw, &out); err != nil {
 		return "", fmt.Errorf("supabase register: decode response: %w", err)
 	}
-	if out.ID == "" {
-		return "", fmt.Errorf("supabase register: empty user id in response")
+
+	// GoTrue v2 returns id at top level for new signups; for duplicate-pending-confirmation
+	// emails it returns {} to prevent enumeration — treat that as "already registered".
+	userID := out.ID
+	if userID == "" && out.User != nil {
+		userID = out.User.ID
 	}
-	return out.ID, nil
+	if userID == "" {
+		return "", fmt.Errorf("supabase register: already registered")
+	}
+	return userID, nil
 }
 
 type supabaseTokenResponse struct {
