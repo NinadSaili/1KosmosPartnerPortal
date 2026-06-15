@@ -29,8 +29,10 @@ function parseJwtPayload(token: string): Record<string, unknown> | null {
 
 function isTokenExpired(token: string): boolean {
   const payload = parseJwtPayload(token);
-  if (!payload || typeof payload.exp !== 'number') return true;
-  // Add a 30-second buffer to account for clock skew
+  // Opaque tokens (e.g. Supabase refresh tokens) cannot be parsed as JWTs.
+  // Treat them as not-expired and let the server validate on the next refresh call.
+  if (!payload || typeof payload.exp !== 'number') return false;
+  // 30-second buffer for clock skew
   return payload.exp * 1000 < Date.now() - 30_000;
 }
 

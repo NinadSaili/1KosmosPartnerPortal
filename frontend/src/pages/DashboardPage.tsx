@@ -98,18 +98,15 @@ const ANNOUNCEMENT_CONFIG: Record<
 };
 
 function AnnouncementCard({ item }: { item: Announcement }) {
-  const cfg = ANNOUNCEMENT_CONFIG[item.type];
+  const cfg = ANNOUNCEMENT_CONFIG[item.category as AnnouncementType] ?? ANNOUNCEMENT_CONFIG.general;
   return (
     <div className="flex items-start gap-3 p-4 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 mb-1 flex-wrap">
           <Badge variant={cfg.variant} className="flex items-center gap-1 text-xs">
             {cfg.icon}
-            {item.type.replace('_', ' ').replace(/\b\w/g, (c) => c.toUpperCase())}
+            {item.category.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())}
           </Badge>
-          {item.isPinned && (
-            <Badge variant="gold" className="text-xs">Pinned</Badge>
-          )}
         </div>
         <p className="text-sm font-semibold text-gray-900 dark:text-white line-clamp-1">
           {item.title}

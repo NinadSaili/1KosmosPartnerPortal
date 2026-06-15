@@ -7,7 +7,6 @@ import {
   Package,
   Megaphone,
   Info,
-  Pin,
   Pencil,
   Trash2,
   ChevronLeft,
@@ -82,7 +81,7 @@ export default function AnnouncementDetailPage() {
   const [formOpen, setFormOpen] = useState(false);
 
   // Fetch neighbor announcements for prev/next navigation
-  const { data: listData } = useAnnouncements({ pageSize: 100, isPublished: true });
+  const { data: listData } = useAnnouncements({ pageSize: 100 });
   const allAnnouncements = listData?.data ?? [];
   const currentIndex = allAnnouncements.findIndex((a) => a.id === id);
   const prevAnnouncement = currentIndex > 0 ? allAnnouncements[currentIndex - 1] : null;
@@ -118,7 +117,7 @@ export default function AnnouncementDetailPage() {
     );
   }
 
-  const config = TYPE_CONFIG[announcement.type] ?? TYPE_CONFIG.general;
+  const config = TYPE_CONFIG[announcement.category as AnnouncementType] ?? TYPE_CONFIG.general;
 
   return (
     <div className="px-4 sm:px-6 lg:px-8 py-8 max-w-3xl mx-auto">
@@ -144,13 +143,7 @@ export default function AnnouncementDetailPage() {
               {config.icon}
               {config.label}
             </Badge>
-            {announcement.isPinned && (
-              <span className="flex items-center gap-1 text-xs text-amber-600 dark:text-amber-400 font-medium">
-                <Pin className="h-3 w-3" />
-                Pinned
-              </span>
-            )}
-            {!announcement.isPublished && (
+            {announcement.publishedAt === null && (
               <Badge variant="secondary">Draft</Badge>
             )}
           </div>
@@ -201,7 +194,7 @@ export default function AnnouncementDetailPage() {
         <div className="px-8 py-6">
           <div
             className="prose prose-sm sm:prose dark:prose-invert max-w-none prose-headings:text-gray-900 dark:prose-headings:text-white prose-a:text-indigo-600 dark:prose-a:text-indigo-400 prose-a:no-underline hover:prose-a:underline"
-            dangerouslySetInnerHTML={{ __html: sanitizeHtml(announcement.bodyHtml) }}
+            dangerouslySetInnerHTML={{ __html: sanitizeHtml(announcement.body) }}
           />
         </div>
 

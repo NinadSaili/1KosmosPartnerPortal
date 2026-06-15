@@ -1,10 +1,14 @@
 package handlers
 
 import (
+	"encoding/base64"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 
@@ -24,7 +28,32 @@ func (h *Handler) authSvc() *services.AuthService {
 		repositories.NewUserRepository(h.pool),
 		h.cfg.SupabaseURL,
 		h.cfg.SupabaseAnonKey,
+		h.cfg.SupabaseServiceRoleKey,
 	)
+}
+
+// jwtSubject base64-decodes a JWT payload and returns the sub claim without
+// verifying the signature.  Used only on tokens that were freshly obtained from
+// Supabase so we trust their origin.
+func jwtSubject(tokenStr string) (string, error) {
+	parts := strings.SplitN(tokenStr, ".", 3)
+	if len(parts) != 3 {
+		return "", errors.New("not a three-part JWT")
+	}
+	payload, err := base64.RawURLEncoding.DecodeString(parts[1])
+	if err != nil {
+		return "", fmt.Errorf("decode JWT payload: %w", err)
+	}
+	var claims struct {
+		Sub string `json:"sub"`
+	}
+	if err := json.Unmarshal(payload, &claims); err != nil {
+		return "", fmt.Errorf("unmarshal JWT payload: %w", err)
+	}
+	if claims.Sub == "" {
+		return "", errors.New("missing sub claim")
+	}
+	return claims.Sub, nil
 }
 
 // ---------------------------------------------------------------------------
@@ -134,18 +163,27 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 
 	svc := h.authSvc()
 
-	accessToken, refreshToken, err := svc.CallSupabaseLogin(r.Context(), req.Email, req.Password)
+	_, refreshToken, err := svc.CallSupabaseLogin(r.Context(), req.Email, req.Password)
 	if err != nil {
 		h.log.Warn().Err(err).Str("email", req.Email).Msg("supabase login failed")
 		writeError(w, http.StatusUnauthorized, "invalid_credentials", "email or password is incorrect")
 		return
 	}
 
-	// Fetch the portal user record for the response.
+	// Fetch the portal user record to embed portal roles in the token.
 	user, err := repositories.NewUserRepository(h.pool).GetUserByEmail(r.Context(), req.Email)
 	if err != nil {
 		h.log.Error().Err(err).Str("email", req.Email).Msg("user not found after successful auth")
 		writeError(w, http.StatusUnauthorized, "user_not_found", "no portal account found for this email")
+		return
+	}
+
+	// Issue a backend-signed JWT so AuthMiddleware can validate it with JWT_SECRET
+	// and read portal-specific claims (role, org_id) independently of Supabase.
+	accessToken, err := services.IssueJWT(user, h.cfg.JWTSecret, time.Hour)
+	if err != nil {
+		h.log.Error().Err(err).Msg("failed to issue access token")
+		writeError(w, http.StatusInternalServerError, "token_error", "failed to issue access token")
 		return
 	}
 
@@ -204,15 +242,35 @@ func (h *Handler) RefreshToken(w http.ResponseWriter, r *http.Request) {
 	}
 
 	svc := h.authSvc()
-	accessToken, newRefresh, err := svc.CallSupabaseRefresh(r.Context(), body.RefreshToken)
+	supabaseAccess, newRefresh, err := svc.CallSupabaseRefresh(r.Context(), body.RefreshToken)
 	if err != nil {
 		h.log.Warn().Err(err).Msg("token refresh failed")
 		writeError(w, http.StatusUnauthorized, "invalid_token", "refresh token is invalid or expired")
 		return
 	}
 
+	// Identify the user from the fresh Supabase token and issue a new backend JWT.
+	sub, err := jwtSubject(supabaseAccess)
+	if err != nil {
+		h.log.Error().Err(err).Msg("cannot parse sub from refreshed supabase token")
+		writeError(w, http.StatusInternalServerError, "token_error", "failed to parse refreshed token")
+		return
+	}
+	user, err := repositories.NewUserRepository(h.pool).GetUserByID(r.Context(), sub)
+	if err != nil {
+		h.log.Error().Err(err).Str("sub", sub).Msg("user not found for refreshed token")
+		writeError(w, http.StatusUnauthorized, "user_not_found", "no portal account found for this token")
+		return
+	}
+	newAccessToken, err := services.IssueJWT(user, h.cfg.JWTSecret, time.Hour)
+	if err != nil {
+		h.log.Error().Err(err).Msg("failed to issue refreshed access token")
+		writeError(w, http.StatusInternalServerError, "token_error", "failed to issue new access token")
+		return
+	}
+
 	writeJSON(w, http.StatusOK, map[string]string{
-		"access_token":  accessToken,
+		"access_token":  newAccessToken,
 		"refresh_token": newRefresh,
 	})
 }
@@ -343,10 +401,10 @@ func (h *Handler) UpdatePassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Forward the caller's Bearer token so Supabase updates the correct account.
-	accessToken := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
 	svc := h.authSvc()
-	if err := svc.CallSupabaseUpdatePassword(r.Context(), accessToken, body.Password); err != nil {
+	// Use the admin API so the backend JWT in the Authorization header does not
+	// need to be forwarded to Supabase (which would reject it — it expects its own JWT).
+	if err := svc.CallSupabaseUpdatePasswordAdmin(r.Context(), targetID, body.Password); err != nil {
 		h.log.Error().Err(err).Str("user_id", targetID).Msg("update password failed")
 		writeError(w, http.StatusBadGateway, "supabase_error", "failed to update password")
 		return

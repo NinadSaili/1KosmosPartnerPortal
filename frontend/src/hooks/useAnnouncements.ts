@@ -44,7 +44,7 @@ export function useUnreadCount(): UseQueryResult<number> {
   return useQuery({
     queryKey: announcementKeys.unreadCount(),
     queryFn: async () => {
-      const result = await announcementApi.list({ isPublished: true });
+      const result = await announcementApi.list({});
       return result.data.filter((a) => !a.isRead).length;
     },
     staleTime: 60 * 1000, // 1 minute

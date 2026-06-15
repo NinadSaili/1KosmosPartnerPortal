@@ -8,6 +8,9 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"time"
+
+	"github.com/golang-jwt/jwt/v5"
 
 	"github.com/1kosmos/partner-portal/internal/models"
 	"github.com/1kosmos/partner-portal/internal/repositories"
@@ -33,18 +36,54 @@ type UpdateUserRequest struct {
 
 // AuthService provides authentication and user-management operations.
 type AuthService struct {
-	userRepo    *repositories.UserRepository
-	supabaseURL string
-	anonKey     string
+	userRepo       *repositories.UserRepository
+	supabaseURL    string
+	anonKey        string
+	serviceRoleKey string
 }
 
 // NewAuthService constructs an AuthService.
-func NewAuthService(userRepo *repositories.UserRepository, supabaseURL, anonKey string) *AuthService {
+func NewAuthService(userRepo *repositories.UserRepository, supabaseURL, anonKey, serviceRoleKey string) *AuthService {
 	return &AuthService{
-		userRepo:    userRepo,
-		supabaseURL: supabaseURL,
-		anonKey:     anonKey,
+		userRepo:       userRepo,
+		supabaseURL:    supabaseURL,
+		anonKey:        anonKey,
+		serviceRoleKey: serviceRoleKey,
 	}
+}
+
+// ---------------------------------------------------------------------------
+// JWT issuance
+// ---------------------------------------------------------------------------
+
+// portalClaims carries the custom claims included in backend-issued access tokens.
+type portalClaims struct {
+	jwt.RegisteredClaims
+	Role  string `json:"role"`
+	Email string `json:"email"`
+	OrgID string `json:"org_id"`
+}
+
+// IssueJWT signs a short-lived HS256 access token for user using secret.
+// The token contains the user's portal role and org_id so protected handlers
+// can authorise without an extra DB round-trip.
+func IssueJWT(user *models.User, secret string, ttl time.Duration) (string, error) {
+	orgID := ""
+	if user.OrganizationID != nil {
+		orgID = user.OrganizationID.String()
+	}
+	now := time.Now()
+	claims := portalClaims{
+		RegisteredClaims: jwt.RegisteredClaims{
+			Subject:   user.ID.String(),
+			IssuedAt:  jwt.NewNumericDate(now),
+			ExpiresAt: jwt.NewNumericDate(now.Add(ttl)),
+		},
+		Role:  user.Role,
+		Email: user.Email,
+		OrgID: orgID,
+	}
+	return jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString([]byte(secret))
 }
 
 // ---------------------------------------------------------------------------
@@ -317,31 +356,32 @@ func (s *AuthService) CallSupabaseRefresh(ctx context.Context, refreshToken stri
 	return out.AccessToken, out.RefreshToken, nil
 }
 
-// CallSupabaseUpdatePassword changes the authenticated user's password via the Supabase Auth API.
-// accessToken is the caller's current Supabase JWT.
-func (s *AuthService) CallSupabaseUpdatePassword(ctx context.Context, accessToken, newPassword string) error {
+// CallSupabaseUpdatePasswordAdmin changes a user's Supabase password via the
+// admin API using the service-role key.  userID must be the user's Supabase UUID
+// (which equals their portal user ID since we keep them in sync).
+func (s *AuthService) CallSupabaseUpdatePasswordAdmin(ctx context.Context, userID, newPassword string) error {
 	body, _ := json.Marshal(map[string]string{"password": newPassword})
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPut,
-		s.supabaseURL+"/auth/v1/user",
+		s.supabaseURL+"/auth/v1/admin/users/"+userID,
 		bytes.NewReader(body),
 	)
 	if err != nil {
-		return fmt.Errorf("supabase update password: build request: %w", err)
+		return fmt.Errorf("supabase admin update password: build request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("apikey", s.anonKey)
-	req.Header.Set("Authorization", "Bearer "+accessToken)
+	req.Header.Set("apikey", s.serviceRoleKey)
+	req.Header.Set("Authorization", "Bearer "+s.serviceRoleKey)
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return fmt.Errorf("supabase update password: http: %w", err)
+		return fmt.Errorf("supabase admin update password: http: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		raw, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("supabase update password: status %d: %s", resp.StatusCode, string(raw))
+		return fmt.Errorf("supabase admin update password: status %d: %s", resp.StatusCode, string(raw))
 	}
 	return nil
 }

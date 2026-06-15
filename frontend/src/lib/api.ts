@@ -296,7 +296,7 @@ export const certApi = {
     axiosInstance.post<AssessmentSchedule>('/assessments', data).then((r) => r.data),
 
   updateAssessment: (id: string, data: Partial<AssessmentSchedule>) =>
-    axiosInstance.patch<AssessmentSchedule>(`/assessments/${id}`, data).then((r) => r.data),
+    axiosInstance.put<AssessmentSchedule>(`/assessments/${id}`, data).then((r) => r.data),
 
   listCertificates: (params?: { userId?: string; page?: number; pageSize?: number }) =>
     axiosInstance.get<PaginatedResponse<IssuedCertificate>>('/certificates', { params }).then((r) => r.data),
@@ -372,8 +372,7 @@ export const dealApi = {
 export interface AnnouncementFilters {
   page?: number;
   pageSize?: number;
-  type?: string;
-  isPinned?: boolean;
+  category?: string;
   isPublished?: boolean;
 }
 

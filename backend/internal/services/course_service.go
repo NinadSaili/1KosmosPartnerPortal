@@ -25,7 +25,7 @@ type CourseFilter struct {
 type CourseWithProgress struct {
 	models.Course
 	VerticalTags       []string `json:"vertical_tags"`
-	CompletionPct      int      `json:"completion_pct"`
+	CompletionPct      int      `json:"progress_pct"`
 	CompletedLessons   int      `json:"completed_lessons"`
 	TotalLessons       int      `json:"total_lessons"`
 }

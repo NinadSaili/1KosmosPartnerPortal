@@ -16,11 +16,10 @@ import type { Announcement } from '@/types';
 
 const announcementSchema = z.object({
   title: z.string().min(1, 'Title is required').max(300),
-  type: z.enum(['vendor_news', 'product_update', 'security_advisory', 'general'], {
-    required_error: 'Type is required',
+  category: z.enum(['vendor_news', 'product_update', 'security_advisory', 'general'], {
+    required_error: 'Category is required',
   }),
-  bodyHtml: z.string().min(1, 'Body is required'),
-  isPinned: z.boolean().default(false),
+  body: z.string().min(1, 'Body is required'),
   isPublished: z.boolean().default(false),
 });
 
@@ -57,9 +56,8 @@ export function AnnouncementFormModal({
     resolver: zodResolver(announcementSchema),
     defaultValues: {
       title: '',
-      type: 'vendor_news',
-      bodyHtml: '',
-      isPinned: false,
+      category: 'vendor_news',
+      body: '',
       isPublished: false,
     },
   });
@@ -68,17 +66,15 @@ export function AnnouncementFormModal({
     if (announcement) {
       reset({
         title: announcement.title,
-        type: announcement.type,
-        bodyHtml: announcement.bodyHtml,
-        isPinned: announcement.isPinned,
-        isPublished: announcement.isPublished,
+        category: (announcement.category as AnnouncementFormData['category']) ?? 'general',
+        body: announcement.body,
+        isPublished: announcement.publishedAt != null,
       });
     } else {
       reset({
         title: '',
-        type: 'vendor_news',
-        bodyHtml: '',
-        isPinned: false,
+        category: 'vendor_news',
+        body: '',
         isPublished: false,
       });
     }
@@ -87,10 +83,19 @@ export function AnnouncementFormModal({
   const onSubmit = async (data: AnnouncementFormData) => {
     try {
       if (announcement) {
-        await updateMutation.mutateAsync({ id: announcement.id, data });
+        await updateMutation.mutateAsync({
+          id: announcement.id,
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          data: data as any,
+        });
         success('Announcement updated', 'The announcement has been saved.');
       } else {
-        await createMutation.mutateAsync(data);
+        const payload = {
+          ...data,
+          publishedAt: data.isPublished ? new Date().toISOString() : undefined,
+        };
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await createMutation.mutateAsync(payload as any);
         success('Announcement created', 'The announcement has been published.');
       }
       onOpenChange(false);
@@ -103,7 +108,7 @@ export function AnnouncementFormModal({
     }
   };
 
-  const TYPE_OPTIONS = [
+  const CATEGORY_OPTIONS = [
     { value: 'vendor_news', label: 'Vendor News' },
     { value: 'product_update', label: 'Product Update' },
     { value: 'security_advisory', label: 'Security Advisory' },
@@ -142,18 +147,18 @@ export function AnnouncementFormModal({
               )}
             </div>
 
-            {/* Type */}
+            {/* Category */}
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                Type <span className="text-red-500">*</span>
+                Category <span className="text-red-500">*</span>
               </label>
-              <Select {...register('type')}>
-                {TYPE_OPTIONS.map((opt) => (
+              <Select {...register('category')}>
+                {CATEGORY_OPTIONS.map((opt) => (
                   <option key={opt.value} value={opt.value}>{opt.label}</option>
                 ))}
               </Select>
-              {errors.type && (
-                <p className="mt-1 text-xs text-red-600 dark:text-red-400">{errors.type.message}</p>
+              {errors.category && (
+                <p className="mt-1 text-xs text-red-600 dark:text-red-400">{errors.category.message}</p>
               )}
             </div>
 
@@ -163,42 +168,22 @@ export function AnnouncementFormModal({
                 Body (HTML) <span className="text-red-500">*</span>
               </label>
               <textarea
-                {...register('bodyHtml')}
+                {...register('body')}
                 rows={10}
                 placeholder="<p>Your announcement body here. HTML is supported.</p>"
                 className="flex w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-mono placeholder:text-gray-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-gray-600 dark:bg-gray-800 dark:text-white resize-y"
               />
-              {errors.bodyHtml && (
-                <p className="mt-1 text-xs text-red-600 dark:text-red-400">{errors.bodyHtml.message}</p>
+              {errors.body && (
+                <p className="mt-1 text-xs text-red-600 dark:text-red-400">{errors.body.message}</p>
               )}
               <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
                 HTML tags are allowed. Be careful with scripts — they will be sanitized on display.
               </p>
             </div>
 
-            {/* Toggles */}
+            {/* Publish toggle */}
             <div className="space-y-3">
               <div className="flex items-center justify-between py-2">
-                <div>
-                  <p className="text-sm font-medium text-gray-700 dark:text-gray-300">Pin Announcement</p>
-                  <p className="text-xs text-gray-500 dark:text-gray-400">Pinned announcements appear at the top of the list</p>
-                </div>
-                <Controller
-                  name="isPinned"
-                  control={control}
-                  render={({ field }) => (
-                    <Switch.Root
-                      checked={field.value}
-                      onCheckedChange={field.onChange}
-                      className="relative inline-flex h-6 w-11 items-center rounded-full bg-gray-200 dark:bg-gray-700 data-[state=checked]:bg-indigo-600 transition-colors"
-                    >
-                      <Switch.Thumb className="inline-block h-4 w-4 rounded-full bg-white shadow-sm transform translate-x-1 data-[state=checked]:translate-x-6 transition-transform" />
-                    </Switch.Root>
-                  )}
-                />
-              </div>
-
-              <div className="flex items-center justify-between py-2 border-t border-gray-100 dark:border-gray-800">
                 <div>
                   <p className="text-sm font-medium text-gray-700 dark:text-gray-300">Publish</p>
                   <p className="text-xs text-gray-500 dark:text-gray-400">Make visible to all partners</p>

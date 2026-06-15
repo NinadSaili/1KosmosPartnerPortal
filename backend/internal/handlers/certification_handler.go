@@ -42,7 +42,12 @@ func (h *Handler) ListCertifications(w http.ResponseWriter, r *http.Request) {
 		certs = []services.CertificationWithEligibility{}
 	}
 
-	writeJSON(w, http.StatusOK, map[string]interface{}{"data": certs})
+	writeJSON(w, http.StatusOK, models.PaginatedResponse[services.CertificationWithEligibility]{
+		Data:     certs,
+		Total:    len(certs),
+		Page:     1,
+		PageSize: len(certs),
+	})
 }
 
 // ---------------------------------------------------------------------------
@@ -276,7 +281,12 @@ func (h *Handler) ListCertificates(w http.ResponseWriter, r *http.Request) {
 		certs = []models.IssuedCertificate{}
 	}
 
-	writeJSON(w, http.StatusOK, map[string]interface{}{"data": certs})
+	writeJSON(w, http.StatusOK, models.PaginatedResponse[models.IssuedCertificate]{
+		Data:     certs,
+		Total:    len(certs),
+		Page:     1,
+		PageSize: len(certs),
+	})
 }
 
 // ---------------------------------------------------------------------------

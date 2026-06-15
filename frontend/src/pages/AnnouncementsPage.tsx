@@ -6,7 +6,6 @@ import {
   Package,
   Megaphone,
   Info,
-  Pin,
   Plus,
   Pencil,
   Trash2,
@@ -86,7 +85,7 @@ interface AnnouncementRowProps {
 }
 
 function AnnouncementRow({ announcement, isAdmin, onEdit, onDelete, onClick }: AnnouncementRowProps) {
-  const config = TYPE_CONFIG[announcement.type] ?? TYPE_CONFIG.general;
+  const config = TYPE_CONFIG[announcement.category as AnnouncementType] ?? TYPE_CONFIG.general;
   const isUnread = !announcement.isRead;
 
   return (
@@ -114,12 +113,6 @@ function AnnouncementRow({ announcement, isAdmin, onEdit, onDelete, onClick }: A
               {config.icon}
               {config.label}
             </Badge>
-            {announcement.isPinned && (
-              <span className="flex items-center gap-1 text-xs text-amber-600 dark:text-amber-400 font-medium">
-                <Pin className="h-3 w-3" />
-                Pinned
-              </span>
-            )}
           </div>
 
           <p
@@ -133,7 +126,7 @@ function AnnouncementRow({ announcement, isAdmin, onEdit, onDelete, onClick }: A
           </p>
 
           <p className="text-xs text-gray-500 dark:text-gray-400 line-clamp-2">
-            {stripHtml(announcement.bodyHtml)}
+            {stripHtml(announcement.body)}
           </p>
 
           <p className="mt-1.5 text-xs text-gray-400 dark:text-gray-500">
@@ -188,16 +181,13 @@ export default function AnnouncementsPage() {
   const { data, isLoading } = useAnnouncements({
     page,
     pageSize: PAGE_SIZE,
-    type: typeFilter || undefined,
-    isPublished: isVendorAdmin ? undefined : true,
+    category: typeFilter || undefined,
   });
 
   const markRead = useMarkAnnouncementRead();
   const deleteMutation = useDeleteAnnouncement();
 
   const allItems = data?.data ?? [];
-  const pinned = allItems.filter((a) => a.isPinned);
-  const regular = allItems.filter((a) => !a.isPinned);
   const total = data?.total ?? 0;
   const totalPages = Math.ceil(total / PAGE_SIZE);
 
@@ -271,36 +261,10 @@ export default function AnnouncementsPage() {
         />
       ) : (
         <div className="space-y-6">
-          {pinned.length > 0 && (
+          {allItems.length > 0 && (
             <div>
-              <h2 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">
-                <Pin className="h-3.5 w-3.5" />
-                Pinned
-              </h2>
-              <div className="rounded-xl border border-amber-200 dark:border-amber-800/50 bg-amber-50/50 dark:bg-amber-900/10 overflow-hidden">
-                {pinned.map((a) => (
-                  <AnnouncementRow
-                    key={a.id}
-                    announcement={a}
-                    isAdmin={isVendorAdmin}
-                    onEdit={handleEdit}
-                    onDelete={handleDelete}
-                    onClick={handleRowClick}
-                  />
-                ))}
-              </div>
-            </div>
-          )}
-
-          {regular.length > 0 && (
-            <div>
-              {pinned.length > 0 && (
-                <h2 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">
-                  Latest
-                </h2>
-              )}
               <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 overflow-hidden">
-                {regular.map((a) => (
+                {allItems.map((a) => (
                   <AnnouncementRow
                     key={a.id}
                     announcement={a}

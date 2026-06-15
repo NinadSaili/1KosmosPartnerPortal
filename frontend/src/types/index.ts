@@ -106,7 +106,7 @@ export interface Certification {
   description: string;
   type: CertType;
   validityMonths: number;
-  passingScore: number;
+  passingScorePercent: number;
   requiredCourses?: Course[];
   isEligible?: boolean;
 }
@@ -220,11 +220,11 @@ export type AnnouncementType =
 export interface Announcement {
   id: string;
   title: string;
-  bodyHtml: string;
-  type: AnnouncementType;
-  isPinned: boolean;
-  isPublished: boolean;
+  body: string;
+  category: string;
+  priority: string;
   createdBy: string;
+  createdAt: string;
   publishedAt: string | null;
   isRead?: boolean;
 }

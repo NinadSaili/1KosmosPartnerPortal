@@ -333,11 +333,18 @@ func (h *Handler) GetCourseProgress(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Collect IDs of completed lessons so the frontend can determine per-lesson state.
+	completedLessonIDs := make([]string, 0, len(details))
+	for _, d := range details {
+		if d.CompletedAt != nil {
+			completedLessonIDs = append(completedLessonIDs, d.Lesson.ID.String())
+		}
+	}
 	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"user_id":        targetUserID,
-		"course_id":      courseID,
-		"completion_pct": pct,
-		"lessons":        details,
+		"user_id":           targetUserID,
+		"course_id":         courseID,
+		"progress_pct":      pct,
+		"completed_lessons": completedLessonIDs,
 	})
 }
 
@@ -382,10 +389,10 @@ func (h *Handler) CompleteLesson(w http.ResponseWriter, r *http.Request) {
 		})
 
 	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"lesson_id":      req.LessonID,
-		"course_id":      courseID,
-		"completion_pct": pct,
-		"course_done":    pct == 100,
-		"xp_awarded":     10,
+		"lesson_id":    req.LessonID,
+		"course_id":    courseID,
+		"progress_pct": pct,
+		"course_done":  pct == 100,
+		"xp_awarded":   10,
 	})
 }

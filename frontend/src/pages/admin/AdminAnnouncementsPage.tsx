@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { format, parseISO } from 'date-fns';
-import { Plus, Pin, Eye, EyeOff, Pencil, Trash2 } from 'lucide-react';
+import { Plus, Eye, EyeOff, Pencil, Trash2 } from 'lucide-react';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
@@ -14,7 +14,8 @@ import {
   useUpdateAnnouncement,
   useDeleteAnnouncement,
 } from '@/hooks/useAnnouncements';
-import type { Announcement, AnnouncementType } from '@/types';
+import type { Announcement } from '@/types';
+import type { AnnouncementType } from '@/types';
 
 // ─── Type badge helper ─────────────────────────────────────────────────────────
 
@@ -54,7 +55,7 @@ export default function AdminAnnouncementsPage() {
   const { data, isLoading } = useAnnouncements({
     page,
     pageSize: PAGE_SIZE,
-    type: typeFilter || undefined,
+    category: typeFilter || undefined,
   });
 
   const updateMutation = useUpdateAnnouncement();
@@ -62,31 +63,18 @@ export default function AdminAnnouncementsPage() {
 
   const handleTogglePublish = async (announcement: Announcement) => {
     try {
+      const isCurrentlyPublished = announcement.publishedAt !== null;
       await updateMutation.mutateAsync({
         id: announcement.id,
-        data: { isPublished: !announcement.isPublished },
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        data: { publishedAt: isCurrentlyPublished ? '' : new Date().toISOString() } as any,
       });
       success(
-        announcement.isPublished ? 'Unpublished' : 'Published',
-        `"${announcement.title}" is now ${announcement.isPublished ? 'a draft' : 'live'}.`,
+        isCurrentlyPublished ? 'Unpublished' : 'Published',
+        `"${announcement.title}" is now ${isCurrentlyPublished ? 'a draft' : 'live'}.`,
       );
     } catch {
       showError('Failed to update announcement');
-    }
-  };
-
-  const handleTogglePin = async (announcement: Announcement) => {
-    try {
-      await updateMutation.mutateAsync({
-        id: announcement.id,
-        data: { isPinned: !announcement.isPinned },
-      });
-      success(
-        announcement.isPinned ? 'Unpinned' : 'Pinned',
-        `"${announcement.title}" has been ${announcement.isPinned ? 'unpinned' : 'pinned'}.`,
-      );
-    } catch {
-      showError('Failed to update pin status');
     }
   };
 
@@ -114,53 +102,35 @@ export default function AdminAnnouncementsPage() {
       header: 'Title',
       cell: (row) => (
         <div className="min-w-0">
-          <div className="flex items-center gap-2 mb-0.5">
-            {row.isPinned && <Pin className="h-3.5 w-3.5 text-amber-500 shrink-0" />}
-            <p className="font-medium text-gray-900 dark:text-white text-sm truncate max-w-xs">
-              {row.title}
-            </p>
-          </div>
+          <p className="font-medium text-gray-900 dark:text-white text-sm truncate max-w-xs mb-0.5">
+            {row.title}
+          </p>
           <p className="text-xs text-gray-500 dark:text-gray-400 line-clamp-1">
-            {row.bodyHtml.replace(/<[^>]*>/g, ' ').trim().slice(0, 80)}…
+            {row.body.replace(/<[^>]*>/g, ' ').trim().slice(0, 80)}…
           </p>
         </div>
       ),
     },
     {
-      key: 'type',
+      key: 'category',
       header: 'Type',
       cell: (row) => (
-        <Badge variant={TYPE_VARIANT[row.type] ?? 'secondary'}>
-          {TYPE_LABELS[row.type] ?? row.type}
+        <Badge variant={TYPE_VARIANT[row.category as AnnouncementType] ?? 'secondary'}>
+          {TYPE_LABELS[row.category as AnnouncementType] ?? row.category}
         </Badge>
       ),
     },
     {
-      key: 'pinned',
-      header: 'Pinned',
-      cell: (row) => (
-        <Button
-          variant="ghost"
-          size="icon"
-          className={`h-7 w-7 ${row.isPinned ? 'text-amber-500' : 'text-gray-400'}`}
-          onClick={() => handleTogglePin(row)}
-          title={row.isPinned ? 'Unpin' : 'Pin'}
-        >
-          <Pin className="h-3.5 w-3.5" />
-        </Button>
-      ),
-    },
-    {
-      key: 'published',
+      key: 'publishedAt',
       header: 'Status',
-      cell: (row) => <StatusBadge status={row.isPublished ? 'published' : 'unpublished'} />,
+      cell: (row) => <StatusBadge status={row.publishedAt !== null ? 'published' : 'unpublished'} />,
     },
     {
       key: 'createdAt',
       header: 'Created',
       cell: (row) => (
         <span className="text-xs text-gray-500 dark:text-gray-400">
-          {format(parseISO(row.publishedAt ?? row.createdBy), 'MMM d, yyyy')}
+          {row.publishedAt ? format(parseISO(row.publishedAt), 'MMM d, yyyy') : '—'}
         </span>
       ),
     },
@@ -180,11 +150,11 @@ export default function AdminAnnouncementsPage() {
           <Button
             variant="ghost"
             size="icon"
-            className={`h-7 w-7 ${row.isPublished ? 'text-yellow-600' : 'text-green-600'}`}
+            className={`h-7 w-7 ${row.publishedAt !== null ? 'text-yellow-600' : 'text-green-600'}`}
             onClick={() => handleTogglePublish(row)}
-            title={row.isPublished ? 'Unpublish' : 'Publish'}
+            title={row.publishedAt !== null ? 'Unpublish' : 'Publish'}
           >
-            {row.isPublished ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+            {row.publishedAt !== null ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
           </Button>
           <Button
             variant="ghost"

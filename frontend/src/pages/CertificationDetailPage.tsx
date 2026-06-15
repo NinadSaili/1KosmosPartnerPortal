@@ -128,7 +128,7 @@ export default function CertificationDetailPage() {
               </span>
               <span className="flex items-center gap-1.5">
                 <FileCheck className="h-4 w-4" />
-                Passing score: {cert.passingScore}%
+                Passing score: {cert.passingScorePercent}%
               </span>
             </div>
           </div>
@@ -292,7 +292,7 @@ export default function CertificationDetailPage() {
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-500 dark:text-gray-400">Passing Score</span>
-                <span className="font-medium text-gray-900 dark:text-white">{cert.passingScore}%</span>
+                <span className="font-medium text-gray-900 dark:text-white">{cert.passingScorePercent}%</span>
               </div>
               <div className="flex justify-between items-center">
                 <span className="text-gray-500 dark:text-gray-400">Eligibility</span>

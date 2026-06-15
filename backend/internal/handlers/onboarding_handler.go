@@ -42,14 +42,8 @@ func (h *Handler) GetOnboarding(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	type response struct {
-		Checklist       interface{} `json:"checklist"`
-		ReadyToDealReg  bool        `json:"ready_to_deal_register"`
-	}
-	writeJSON(w, http.StatusOK, response{
-		Checklist:      checklist,
-		ReadyToDealReg: svc.IsReadyToDealRegister(checklist),
-	})
+	checklist.ReadyToDealRegister = svc.IsReadyToDealRegister(checklist)
+	writeJSON(w, http.StatusOK, checklist)
 }
 
 // ---------------------------------------------------------------------------
@@ -108,12 +102,6 @@ func (h *Handler) UpdateOnboarding(w http.ResponseWriter, r *http.Request) {
 
 	h.auditLog.WriteAudit(r.Context(), middleware.GetUserID(r), "update", "onboarding_checklist", orgID, nil)
 
-	type response struct {
-		Checklist      interface{} `json:"checklist"`
-		ReadyToDealReg bool        `json:"ready_to_deal_register"`
-	}
-	writeJSON(w, http.StatusOK, response{
-		Checklist:      updated,
-		ReadyToDealReg: svc.IsReadyToDealRegister(updated),
-	})
+	updated.ReadyToDealRegister = svc.IsReadyToDealRegister(updated)
+	writeJSON(w, http.StatusOK, updated)
 }
