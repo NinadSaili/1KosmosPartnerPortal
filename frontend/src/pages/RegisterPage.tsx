@@ -4,7 +4,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { motion } from 'framer-motion';
-import { Mail, Lock, User, Building2, ArrowRight } from 'lucide-react';
+import { Mail, Lock, User, Building2, ArrowRight, CheckCircle2 } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
@@ -57,8 +57,9 @@ function Field({ label, error, children }: FieldProps) {
 
 export default function RegisterPage() {
   const navigate = useNavigate();
-  const { register: registerUser, login } = useAuth();
+  const { register: registerUser } = useAuth();
   const [apiError, setApiError] = useState<string | null>(null);
+  const [verified, setVerified] = useState(false);
 
   const {
     register,
@@ -77,9 +78,7 @@ export default function RegisterPage() {
         organization: data.organization,
         password: data.password,
       });
-      // Auto-login after registration
-      await login(data.email, data.password);
-      navigate('/onboarding');
+      setVerified(true);
     } catch (err: unknown) {
       const message =
         err instanceof Error ? err.message : 'Registration failed. Please try again.';
@@ -108,6 +107,26 @@ export default function RegisterPage() {
           </p>
         </div>
 
+        {verified ? (
+          <Card className="shadow-xl border-0 dark:bg-gray-900">
+            <CardContent className="pt-8 pb-8 text-center space-y-4">
+              <CheckCircle2 className="mx-auto h-12 w-12 text-green-500" />
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
+                Account created
+              </h2>
+              <p className="text-sm text-gray-600 dark:text-gray-400">
+                Please check your email and verify your account before signing in.
+              </p>
+              <button
+                type="button"
+                onClick={() => navigate('/login')}
+                className="mt-2 text-sm font-medium text-indigo-600 dark:text-indigo-400 hover:underline"
+              >
+                Go to sign in
+              </button>
+            </CardContent>
+          </Card>
+        ) : (
         <Card className="shadow-xl border-0 dark:bg-gray-900">
           <CardHeader className="pb-2">
             <CardTitle className="sr-only">Register</CardTitle>
@@ -238,6 +257,7 @@ export default function RegisterPage() {
             </p>
           </CardContent>
         </Card>
+        )}
       </motion.div>
     </div>
   );

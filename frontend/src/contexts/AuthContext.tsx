@@ -148,16 +148,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const register = useCallback(async (data: RegisterRequest) => {
-    const result = await authApi.register({
+    await authApi.register({
       email: data.email,
       password: data.password,
       fullName: data.fullName,
       organizationName: data.organization ?? data.organizationName,
       inviteToken: data.inviteToken,
     });
-    storeTokens(result.tokens);
-    setTokens(result.tokens);
-    setUser(result.user);
+    // Account created; email confirmation required before the user can log in.
   }, []);
 
   const logout = useCallback(() => {

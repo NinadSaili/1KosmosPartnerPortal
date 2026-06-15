@@ -200,15 +200,14 @@ export const authApi = {
     };
   },
 
-  register: async (data: RegisterRequest): Promise<{ tokens: AuthTokens; user: AuthUser }> => {
-    // Send registration data; fullName → full_name via request interceptor.
+  register: async (data: RegisterRequest): Promise<void> => {
+    // Account is created; Supabase sends a verification email.
+    // The user must confirm their email before they can log in.
     await axiosInstance.post('/auth/register', {
       email: data.email,
       password: data.password,
       fullName: data.fullName,
     });
-    // Backend returns only the User; follow up with login to obtain tokens.
-    return authApi.login({ email: data.email, password: data.password });
   },
   magicLink: (email: string) =>
     axiosInstance.post<{ message: string }>('/auth/magic-link', { email }).then((r) => r.data),
