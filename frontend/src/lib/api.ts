@@ -128,9 +128,16 @@ export const authApi = {
   login: (data: LoginRequest) =>
     axiosInstance.post<{ tokens: AuthTokens; user: AuthUser }>('/auth/login', data).then((r) => r.data),
 
-  register: (data: RegisterRequest) =>
+ /* register: (data: RegisterRequest) =>
     axiosInstance.post<{ tokens: AuthTokens; user: AuthUser }>('/auth/register', data).then((r) => r.data),
-
+*/
+register: (data: RegisterRequest) =>
+  axiosInstance.post<{ tokens: AuthTokens; user: AuthUser }>('/auth/register', {
+    email: data.email,
+    password: data.password,
+    full_name: data.fullName,
+  }).then((r) => r.data),
+  
   magicLink: (email: string) =>
     axiosInstance.post<{ message: string }>('/auth/magic-link', { email }).then((r) => r.data),
 

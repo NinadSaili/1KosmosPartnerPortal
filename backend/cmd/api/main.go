@@ -14,9 +14,13 @@ import (
 	"github.com/1kosmos/partner-portal/internal/db"
 	"github.com/1kosmos/partner-portal/internal/router"
 	"github.com/1kosmos/partner-portal/pkg/logger"
+	"github.com/joho/godotenv"
 )
 
 func main() {
+	// Load .env file if it exists.
+	_ = godotenv.Load()
+
 	// Load configuration from environment variables.
 	cfg, err := config.Load()
 	if err != nil {
