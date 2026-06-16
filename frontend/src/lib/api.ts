@@ -355,7 +355,7 @@ export const dealApi = {
     axiosInstance.get<PaginatedResponse<Deal>>('/deals', { params }).then((r) => r.data),
 
   get: (id: string) =>
-    axiosInstance.get<Deal & { documents: DealDocument[]; history: DealStatusHistory[] }>(`/deals/${id}`).then((r) => r.data),
+    axiosInstance.get<Deal & { documents: DealDocument[]; statusHistory: DealStatusHistory[] }>(`/deals/${id}`).then((r) => r.data),
 
   create: (data: Partial<Deal>) =>
     axiosInstance.post<Deal>('/deals', data).then((r) => r.data),
@@ -403,17 +403,18 @@ export const announcementApi = {
 export interface TeamProgressEntry {
   userId: string;
   fullName: string;
-  avatarUrl: string | null;
-  completionPct: number;
-  certsEarned: number;
+  email: string;
+  completedLessons: number;
+  totalLessons: number;
+  lastActivityAt: string | null;
 }
 
 export const dashboardApi = {
   getStats: () =>
     axiosInstance.get<DashboardStats>('/dashboard/stats').then((r) => r.data),
 
-  getTeamProgress: (params?: { page?: number; pageSize?: number }) =>
-    axiosInstance.get<PaginatedResponse<TeamProgressEntry>>('/dashboard/team-progress', { params }).then((r) => r.data),
+  getTeamProgress: (params?: { pageSize?: number }) =>
+    axiosInstance.get<{ orgId: string; data: TeamProgressEntry[] }>('/dashboard/team-progress', { params }).then((r) => r.data),
 };
 
 // ─── AI API ───────────────────────────────────────────────────────────────────

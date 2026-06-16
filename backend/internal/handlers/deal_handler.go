@@ -107,11 +107,12 @@ func (h *Handler) CreateDeal(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "validation_error", "contact_email is required")
 		return
 	}
-	if req.Currency == "" {
-		req.Currency = "USD"
+	if req.Vertical == "" {
+		writeError(w, http.StatusBadRequest, "validation_error", "vertical is required")
+		return
 	}
-	if req.Stage == "" {
-		writeError(w, http.StatusBadRequest, "validation_error", "stage is required")
+	if req.ExpectedCloseDate == "" {
+		writeError(w, http.StatusBadRequest, "validation_error", "expected_close_date is required")
 		return
 	}
 

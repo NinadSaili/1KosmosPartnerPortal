@@ -196,7 +196,7 @@ export interface DealDocument {
   id: string;
   dealId: string;
   fileName: string;
-  fileUrl: string;
+  storagePath: string;
 }
 
 export interface DealStatusHistory {
@@ -204,9 +204,9 @@ export interface DealStatusHistory {
   dealId: string;
   fromStatus: DealStatus | null;
   toStatus: DealStatus;
-  actorId: string;
+  changedBy: string;
   comment: string | null;
-  createdAt: string;
+  changedAt: string;
 }
 
 // ─── Announcements ────────────────────────────────────────────────────────────

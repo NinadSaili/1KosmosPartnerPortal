@@ -291,14 +291,14 @@ export default function DealDetailPage() {
                 {deal.documents.map((doc) => (
                   <a
                     key={doc.id}
-                    href={doc.fileUrl}
+                    href={doc.storagePath}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="flex items-center gap-3 p-3 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors group"
                   >
                     <FileText className="h-5 w-5 text-indigo-500 shrink-0" />
                     <span className="text-sm font-medium text-gray-900 dark:text-white flex-1 truncate">
-                      {doc.fileName || doc.fileUrl}
+                      {doc.fileName || doc.storagePath}
                     </span>
                     <ExternalLink className="h-4 w-4 text-gray-400 group-hover:text-indigo-500 shrink-0" />
                   </a>
@@ -311,7 +311,7 @@ export default function DealDetailPage() {
           <Card>
             <CardHeader><CardTitle className="text-base">Status History</CardTitle></CardHeader>
             <CardContent className="pt-0">
-              <StatusTimeline history={deal.history ?? []} />
+              <StatusTimeline history={deal.statusHistory ?? []} />
             </CardContent>
           </Card>
         </motion.div>

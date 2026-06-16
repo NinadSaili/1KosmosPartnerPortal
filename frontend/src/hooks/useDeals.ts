@@ -22,7 +22,7 @@ export const dealKeys = {
 
 type DealDetail = Deal & {
   documents: DealDocument[];
-  history: DealStatusHistory[];
+  statusHistory: DealStatusHistory[];
 };
 
 // ─── Hooks ────────────────────────────────────────────────────────────────────

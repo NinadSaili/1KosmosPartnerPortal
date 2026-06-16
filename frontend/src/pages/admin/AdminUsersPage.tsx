@@ -73,7 +73,7 @@ function ProvisionUserModal({ open, onOpenChange, onSuccess }: ProvisionModalPro
 
   const onSubmit = async (data: ProvisionFormData) => {
     try {
-      await axiosInstance.post('/users/provision', data);
+      await axiosInstance.post('/admin/users/provision', data);
       success('User provisioned', `An invitation has been sent to ${data.email}.`);
       qc.invalidateQueries({ queryKey: ['admin', 'users'] });
       reset();

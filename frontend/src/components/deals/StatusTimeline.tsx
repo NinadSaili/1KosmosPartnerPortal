@@ -80,7 +80,7 @@ export function StatusTimeline({ history, actorNames, className }: StatusTimelin
 
   // Sort ascending by date so oldest first; latest is last
   const sorted = [...history].sort(
-    (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
+    (a, b) => new Date(a.changedAt).getTime() - new Date(b.changedAt).getTime(),
   );
   const latestId = sorted[sorted.length - 1].id;
 
@@ -135,14 +135,14 @@ export function StatusTimeline({ history, actorNames, className }: StatusTimelin
                   )}
                 </div>
                 <time className="text-xs text-gray-400 dark:text-gray-500 shrink-0">
-                  {format(new Date(entry.createdAt), 'MMM d, yyyy h:mm a')}
+                  {format(new Date(entry.changedAt), 'MMM d, yyyy h:mm a')}
                 </time>
               </div>
 
               <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                 by{' '}
                 <span className="font-medium text-gray-700 dark:text-gray-300">
-                  {resolveActorName(entry.actorId, actorNames)}
+                  {resolveActorName(entry.changedBy, actorNames)}
                 </span>
                 {entry.fromStatus && (
                   <>

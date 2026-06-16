@@ -40,7 +40,7 @@ func NewDashboardRepository(db *pgxpool.Pool) *DashboardRepository {
 
 // CountDealsByStatus returns a map of deal status -> count, optionally scoped to an org.
 func (r *DashboardRepository) CountDealsByStatus(ctx context.Context, orgID *string) (map[string]int, error) {
-	q := `SELECT status, COUNT(*) FROM deals WHERE deleted_at IS NULL`
+	q := `SELECT status, COUNT(*) FROM deals WHERE TRUE`
 	args := []any{}
 	if orgID != nil {
 		q += " AND organization_id = $1"
@@ -86,7 +86,7 @@ func (r *DashboardRepository) CountCertsByOrg(ctx context.Context, orgID *string
 // Pass userID to scope to a single user, orgID to scope to an org, or neither for global.
 func (r *DashboardRepository) GetTrainingCompletion(ctx context.Context, userID *string, orgID *string) (float64, error) {
 	// Total published lessons
-	totalQ := `SELECT COUNT(*) FROM lessons WHERE is_published = true AND deleted_at IS NULL`
+	totalQ := `SELECT COUNT(*) FROM lessons`
 	var total int
 	if err := r.db.QueryRow(ctx, totalQ).Scan(&total); err != nil {
 		return 0, fmt.Errorf("count total lessons: %w", err)
@@ -132,11 +132,11 @@ func (r *DashboardRepository) GetTeamProgress(ctx context.Context, orgID string)
 			u.full_name,
 			u.email,
 			COUNT(lp.id) FILTER (WHERE lp.completed_at IS NOT NULL) AS completed,
-			(SELECT COUNT(*) FROM lessons WHERE is_published = true AND deleted_at IS NULL) AS total,
+			(SELECT COUNT(*) FROM lessons) AS total,
 			MAX(lp.last_accessed_at) AS last_activity
 		FROM users u
 		LEFT JOIN lesson_progress lp ON lp.user_id = u.id
-		WHERE u.organization_id = $1 AND u.deleted_at IS NULL
+		WHERE u.organization_id = $1
 		GROUP BY u.id, u.full_name, u.email
 		ORDER BY u.full_name`
 

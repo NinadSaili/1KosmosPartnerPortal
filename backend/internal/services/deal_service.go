@@ -25,16 +25,15 @@ type DealDetail struct {
 
 // CreateDealRequest is the payload for creating a new deal.
 type CreateDealRequest struct {
-	CompanyName       string              `json:"company_name"`
-	ContactName       string              `json:"contact_name"`
-	ContactEmail      string              `json:"contact_email"`
-	ContactPhone      *string             `json:"contact_phone,omitempty"`
-	EstimatedValue    *float64            `json:"estimated_value,omitempty"`
-	Currency          string              `json:"currency"`
-	ExpectedCloseDate *string             `json:"expected_close_date,omitempty"`
-	Stage             string              `json:"stage"`
-	Notes             *string             `json:"notes,omitempty"`
-	Documents         []DealDocumentInput `json:"documents,omitempty"`
+	CompanyName         string              `json:"company_name"`
+	ContactName         string              `json:"contact_name"`
+	ContactEmail        string              `json:"contact_email"`
+	Vertical            string              `json:"vertical"`
+	OpportunityValueUsd float64             `json:"opportunity_value_usd"`
+	ExpectedCloseDate   string              `json:"expected_close_date"`
+	CompetingVendors    []string            `json:"competing_vendors,omitempty"`
+	Notes               *string             `json:"notes,omitempty"`
+	Documents           []DealDocumentInput `json:"documents,omitempty"`
 }
 
 // DealDocumentInput is a file reference to attach to a deal on create/update.
@@ -47,16 +46,15 @@ type DealDocumentInput struct {
 
 // UpdateDealRequest is the payload for updating an existing deal.
 type UpdateDealRequest struct {
-	CompanyName       *string             `json:"company_name,omitempty"`
-	ContactName       *string             `json:"contact_name,omitempty"`
-	ContactEmail      *string             `json:"contact_email,omitempty"`
-	ContactPhone      *string             `json:"contact_phone,omitempty"`
-	EstimatedValue    *float64            `json:"estimated_value,omitempty"`
-	Currency          *string             `json:"currency,omitempty"`
-	ExpectedCloseDate *string             `json:"expected_close_date,omitempty"`
-	Stage             *string             `json:"stage,omitempty"`
-	Notes             *string             `json:"notes,omitempty"`
-	Documents         []DealDocumentInput `json:"documents,omitempty"`
+	CompanyName         *string             `json:"company_name,omitempty"`
+	ContactName         *string             `json:"contact_name,omitempty"`
+	ContactEmail        *string             `json:"contact_email,omitempty"`
+	Vertical            *string             `json:"vertical,omitempty"`
+	OpportunityValueUsd *float64            `json:"opportunity_value_usd,omitempty"`
+	ExpectedCloseDate   *string             `json:"expected_close_date,omitempty"`
+	CompetingVendors    []string            `json:"competing_vendors,omitempty"`
+	Notes               *string             `json:"notes,omitempty"`
+	Documents           []DealDocumentInput `json:"documents,omitempty"`
 }
 
 // allowedTransitions defines the valid (currentStatus → newStatus, actorRole)
@@ -165,7 +163,7 @@ func (s *DealService) GetDeal(ctx context.Context, id, userID, userRole, orgID s
 			return nil, repositories.ErrNotFound
 		}
 	default:
-		if deal.OwnerID.String() != userID {
+		if deal.SubmitterID.String() != userID {
 			return nil, repositories.ErrNotFound
 		}
 	}
@@ -196,27 +194,28 @@ func (s *DealService) CreateDeal(ctx context.Context, req CreateDealRequest, sub
 		return nil, fmt.Errorf("invalid org id: %w", err)
 	}
 
-	d := &models.Deal{
-		ID:             uuid.New(),
-		OrganizationID: orgUUID,
-		OwnerID:        submitterUUID,
-		CompanyName:    req.CompanyName,
-		ContactName:    req.ContactName,
-		ContactEmail:   req.ContactEmail,
-		ContactPhone:   req.ContactPhone,
-		EstimatedValue: req.EstimatedValue,
-		Currency:       req.Currency,
-		Stage:          req.Stage,
-		Status:         "draft",
-		Notes:          req.Notes,
+	if _, parseErr := time.Parse("2006-01-02", req.ExpectedCloseDate); parseErr != nil {
+		return nil, fmt.Errorf("invalid expected_close_date format (use YYYY-MM-DD): %w", parseErr)
 	}
 
-	if req.ExpectedCloseDate != nil && *req.ExpectedCloseDate != "" {
-		t, parseErr := time.Parse("2006-01-02", *req.ExpectedCloseDate)
-		if parseErr != nil {
-			return nil, fmt.Errorf("invalid expected_close_date format (use YYYY-MM-DD): %w", parseErr)
-		}
-		d.ExpectedCloseDate = &t
+	competingVendors := req.CompetingVendors
+	if competingVendors == nil {
+		competingVendors = []string{}
+	}
+
+	d := &models.Deal{
+		ID:                  uuid.New(),
+		OrganizationID:      orgUUID,
+		SubmitterID:         submitterUUID,
+		CompanyName:         req.CompanyName,
+		ContactName:         req.ContactName,
+		ContactEmail:        req.ContactEmail,
+		Vertical:            req.Vertical,
+		OpportunityValueUsd: req.OpportunityValueUsd,
+		ExpectedCloseDate:   req.ExpectedCloseDate,
+		CompetingVendors:    competingVendors,
+		Status:              "draft",
+		Notes:               req.Notes,
 	}
 
 	created, err := s.repo.CreateDeal(ctx, d)
@@ -263,7 +262,7 @@ func (s *DealService) UpdateDeal(ctx context.Context, id string, req UpdateDealR
 
 	// Access control
 	if actorRole != "vendor_admin" {
-		if existing.OwnerID.String() != actorID {
+		if existing.SubmitterID.String() != actorID {
 			return nil, repositories.ErrNotFound
 		}
 		if existing.Status != "draft" {
@@ -281,20 +280,17 @@ func (s *DealService) UpdateDeal(ctx context.Context, id string, req UpdateDealR
 	if req.ContactEmail != nil {
 		updates["contact_email"] = *req.ContactEmail
 	}
-	if req.ContactPhone != nil {
-		updates["contact_phone"] = *req.ContactPhone
+	if req.Vertical != nil {
+		updates["vertical"] = *req.Vertical
 	}
-	if req.EstimatedValue != nil {
-		updates["estimated_value"] = *req.EstimatedValue
-	}
-	if req.Currency != nil {
-		updates["currency"] = *req.Currency
-	}
-	if req.Stage != nil {
-		updates["stage"] = *req.Stage
+	if req.OpportunityValueUsd != nil {
+		updates["opportunity_value_usd"] = *req.OpportunityValueUsd
 	}
 	if req.Notes != nil {
 		updates["notes"] = *req.Notes
+	}
+	if req.CompetingVendors != nil {
+		updates["competing_vendors"] = req.CompetingVendors
 	}
 	if req.ExpectedCloseDate != nil {
 		t, parseErr := time.Parse("2006-01-02", *req.ExpectedCloseDate)
@@ -343,7 +339,7 @@ func (s *DealService) UpdateStatus(ctx context.Context, id, newStatus, actorID, 
 	// Determine effective role: if actorRole is not vendor_admin and the actor
 	// owns the deal, treat them as "submitter" for transition validation.
 	effectiveRole := actorRole
-	if actorRole != "vendor_admin" && existing.OwnerID.String() == actorID {
+	if actorRole != "vendor_admin" && existing.SubmitterID.String() == actorID {
 		effectiveRole = "submitter"
 	}
 

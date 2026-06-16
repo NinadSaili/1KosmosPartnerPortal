@@ -3,14 +3,14 @@ import {
   type UseQueryResult,
 } from '@tanstack/react-query';
 import { dashboardApi, type TeamProgressEntry } from '../lib/api';
-import type { DashboardStats, PaginatedResponse } from '../types';
+import type { DashboardStats } from '../types';
 
 // ─── Query keys ───────────────────────────────────────────────────────────────
 
 export const dashboardKeys = {
   all: ['dashboard'] as const,
   stats: () => [...dashboardKeys.all, 'stats'] as const,
-  teamProgress: (params: { page?: number; pageSize?: number }) =>
+  teamProgress: (params: { pageSize?: number }) =>
     [...dashboardKeys.all, 'teamProgress', params] as const,
 };
 
@@ -26,8 +26,8 @@ export function useDashboardStats(): UseQueryResult<DashboardStats> {
 }
 
 export function useTeamProgress(
-  params: { page?: number; pageSize?: number } = {},
-): UseQueryResult<PaginatedResponse<TeamProgressEntry>> {
+  params: { pageSize?: number } = {},
+): UseQueryResult<{ orgId: string; data: TeamProgressEntry[] }> {
   return useQuery({
     queryKey: dashboardKeys.teamProgress(params),
     queryFn: () => dashboardApi.getTeamProgress(params),

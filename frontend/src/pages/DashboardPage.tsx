@@ -19,7 +19,7 @@ import {
   Newspaper,
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
-import { dashboardApi, announcementApi } from '@/lib/api';
+import { dashboardApi, announcementApi, onboardingApi } from '@/lib/api';
 import type { Announcement, AnnouncementType } from '@/types';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
@@ -169,18 +169,21 @@ function TrainingSection({
     {
       key: 'progress',
       header: 'Completion',
-      cell: (r) => (
-        <div className="flex items-center gap-3 min-w-[160px]">
-          <ProgressBar value={r.completionPct} size="sm" className="flex-1" />
-          <span className="text-xs text-gray-500 w-10 text-right">{r.completionPct}%</span>
-        </div>
-      ),
+      cell: (r) => {
+        const pct = r.totalLessons > 0 ? Math.round((r.completedLessons / r.totalLessons) * 100) : 0;
+        return (
+          <div className="flex items-center gap-3 min-w-[160px]">
+            <ProgressBar value={pct} size="sm" className="flex-1" />
+            <span className="text-xs text-gray-500 w-10 text-right">{pct}%</span>
+          </div>
+        );
+      },
     },
     {
-      key: 'certs',
-      header: 'Certs',
+      key: 'lessons',
+      header: 'Lessons',
       cell: (r) => (
-        <Badge variant="default" className="text-xs">{r.certsEarned}</Badge>
+        <Badge variant="default" className="text-xs">{r.completedLessons}/{r.totalLessons}</Badge>
       ),
     },
   ];
@@ -318,8 +321,23 @@ export default function DashboardPage() {
     staleTime: 60_000,
   });
 
-  const onboardingCompletedCount = 3; // Placeholder; would come from onboarding API
+  const { data: onboardingData } = useQuery({
+    queryKey: ['onboarding', user?.organizationId],
+    queryFn: () => onboardingApi.get(user!.organizationId!),
+    enabled: !!(user?.organizationId) && (isPartnerAdmin || !isVendorAdmin),
+    staleTime: 60_000,
+  });
+
   const onboardingTotal = 5;
+  const onboardingCompletedCount = onboardingData
+    ? [
+        onboardingData.mndaSigned,
+        onboardingData.resellerAgreementSigned,
+        onboardingData.accountMappingDone,
+        onboardingData.salesEnablementComplete,
+        onboardingData.technicalEnablementComplete,
+      ].filter(Boolean).length
+    : 0;
 
   const showOnboardingBanner =
     !bannerDismissed && onboardingCompletedCount < onboardingTotal;

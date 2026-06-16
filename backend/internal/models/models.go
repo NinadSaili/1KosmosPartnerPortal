@@ -240,23 +240,22 @@ type ResourceVerticalTag struct {
 
 // Deal is a partner deal registration record.
 type Deal struct {
-	ID                uuid.UUID  `json:"id"`
-	OrganizationID    uuid.UUID  `json:"organization_id"`
-	OwnerID           uuid.UUID  `json:"owner_id"`
-	CompanyName       string     `json:"company_name"`
-	ContactName       string     `json:"contact_name"`
-	ContactEmail      string     `json:"contact_email"`
-	ContactPhone      *string    `json:"contact_phone,omitempty"`
-	EstimatedValue    *float64   `json:"estimated_value,omitempty"`
-	Currency          string     `json:"currency"`
-	ExpectedCloseDate *time.Time `json:"expected_close_date,omitempty"`
-	Stage             string     `json:"stage"`
-	Status            string     `json:"status"`
-	Notes             *string    `json:"notes,omitempty"`
-	SalesforceID      *string    `json:"salesforce_id,omitempty"`
-	CreatedAt         time.Time  `json:"created_at"`
-	UpdatedAt         time.Time  `json:"updated_at"`
-	DeletedAt         *time.Time `json:"deleted_at,omitempty"`
+	ID                  uuid.UUID  `json:"id"`
+	SubmitterID         uuid.UUID  `json:"submitter_id"`
+	OrganizationID      uuid.UUID  `json:"organization_id"`
+	CompanyName         string     `json:"company_name"`
+	ContactName         string     `json:"contact_name"`
+	ContactEmail        string     `json:"contact_email"`
+	Vertical            string     `json:"vertical"`
+	OpportunityValueUsd float64    `json:"opportunity_value_usd"`
+	ExpectedCloseDate   string     `json:"expected_close_date"`
+	CompetingVendors    []string   `json:"competing_vendors"`
+	Notes               *string    `json:"notes,omitempty"`
+	Status              string     `json:"status"`
+	ReviewerID          *uuid.UUID `json:"reviewer_id,omitempty"`
+	ReviewerComment     *string    `json:"reviewer_comment,omitempty"`
+	CreatedAt           time.Time  `json:"created_at"`
+	UpdatedAt           time.Time  `json:"updated_at"`
 }
 
 // DealDocument is a file attached to a deal.
@@ -414,15 +413,14 @@ type CreateResourceRequest struct {
 
 // CreateDealRequest is the payload for POST /api/v1/deals.
 type CreateDealRequest struct {
-	CompanyName       string   `json:"company_name"`
-	ContactName       string   `json:"contact_name"`
-	ContactEmail      string   `json:"contact_email"`
-	ContactPhone      *string  `json:"contact_phone,omitempty"`
-	EstimatedValue    *float64 `json:"estimated_value,omitempty"`
-	Currency          string   `json:"currency"`
-	ExpectedCloseDate *string  `json:"expected_close_date,omitempty"`
-	Stage             string   `json:"stage"`
-	Notes             *string  `json:"notes,omitempty"`
+	CompanyName         string   `json:"company_name"`
+	ContactName         string   `json:"contact_name"`
+	ContactEmail        string   `json:"contact_email"`
+	Vertical            string   `json:"vertical"`
+	OpportunityValueUsd float64  `json:"opportunity_value_usd"`
+	ExpectedCloseDate   string   `json:"expected_close_date"`
+	CompetingVendors    []string `json:"competing_vendors,omitempty"`
+	Notes               *string  `json:"notes,omitempty"`
 }
 
 // UpdateDealStatusRequest is the payload for PATCH /api/v1/deals/{id}/status.

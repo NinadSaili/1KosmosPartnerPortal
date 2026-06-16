@@ -26,23 +26,28 @@ func NewDealRepository(db *pgxpool.Pool) *DealRepository {
 }
 
 // dealColumns is the canonical SELECT column list for the deals table.
+// expected_close_date is cast to text so the API returns a YYYY-MM-DD string
+// that is timezone-safe for the frontend.
 const dealColumns = `
-	id, organization_id, owner_id, company_name, contact_name, contact_email,
-	contact_phone, estimated_value, currency, expected_close_date, stage,
-	status, notes, salesforce_id, created_at, updated_at, deleted_at`
+	id, submitter_id, organization_id, company_name, contact_name, contact_email,
+	vertical, opportunity_value_usd, expected_close_date::text, competing_vendors,
+	notes, status, reviewer_id, reviewer_comment, created_at, updated_at`
 
 // scanDeal scans a row into a Deal.
 func scanDeal(row pgx.Row) (*models.Deal, error) {
 	var d models.Deal
 	err := row.Scan(
-		&d.ID, &d.OrganizationID, &d.OwnerID, &d.CompanyName,
-		&d.ContactName, &d.ContactEmail, &d.ContactPhone,
-		&d.EstimatedValue, &d.Currency, &d.ExpectedCloseDate,
-		&d.Stage, &d.Status, &d.Notes, &d.SalesforceID,
-		&d.CreatedAt, &d.UpdatedAt, &d.DeletedAt,
+		&d.ID, &d.SubmitterID, &d.OrganizationID, &d.CompanyName,
+		&d.ContactName, &d.ContactEmail, &d.Vertical,
+		&d.OpportunityValueUsd, &d.ExpectedCloseDate, &d.CompetingVendors,
+		&d.Notes, &d.Status, &d.ReviewerID, &d.ReviewerComment,
+		&d.CreatedAt, &d.UpdatedAt,
 	)
 	if err != nil {
 		return nil, err
+	}
+	if d.CompetingVendors == nil {
+		d.CompetingVendors = []string{}
 	}
 	return &d, nil
 }
@@ -56,12 +61,12 @@ func (r *DealRepository) ListDeals(
 	status, search string,
 	offset, limit int,
 ) ([]models.Deal, int, error) {
-	conditions := []string{"d.deleted_at IS NULL"}
+	conditions := []string{}
 	args := []any{}
 	i := 1
 
 	if submitterID != nil {
-		conditions = append(conditions, fmt.Sprintf("d.owner_id = $%d", i))
+		conditions = append(conditions, fmt.Sprintf("d.submitter_id = $%d", i))
 		args = append(args, *submitterID)
 		i++
 	}
@@ -81,7 +86,10 @@ func (r *DealRepository) ListDeals(
 		i++
 	}
 
-	where := "WHERE " + strings.Join(conditions, " AND ")
+	var where string
+	if len(conditions) > 0 {
+		where = "WHERE " + strings.Join(conditions, " AND ")
+	}
 
 	var total int
 	countQ := fmt.Sprintf("SELECT COUNT(*) FROM deals d %s", where)
@@ -119,7 +127,7 @@ func (r *DealRepository) ListDeals(
 
 // GetDealByID fetches a single deal by UUID.
 func (r *DealRepository) GetDealByID(ctx context.Context, id string) (*models.Deal, error) {
-	q := fmt.Sprintf(`SELECT %s FROM deals d WHERE d.id = $1 AND d.deleted_at IS NULL`, dealColumns)
+	q := fmt.Sprintf(`SELECT %s FROM deals d WHERE d.id = $1`, dealColumns)
 	d, err := scanDeal(r.db.QueryRow(ctx, q, id))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -157,10 +165,10 @@ func (r *DealRepository) GetDealWithHistory(
 func (r *DealRepository) CreateDeal(ctx context.Context, d *models.Deal) (*models.Deal, error) {
 	const q = `
 		INSERT INTO deals
-			(id, organization_id, owner_id, company_name, contact_name, contact_email,
-			 contact_phone, estimated_value, currency, expected_close_date, stage,
-			 status, notes, salesforce_id, created_at, updated_at)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
+			(id, submitter_id, organization_id, company_name, contact_name, contact_email,
+			 vertical, opportunity_value_usd, expected_close_date, competing_vendors,
+			 notes, status, created_at, updated_at)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
 		RETURNING ` + dealColumns
 
 	if d.ID == uuid.Nil {
@@ -170,10 +178,16 @@ func (r *DealRepository) CreateDeal(ctx context.Context, d *models.Deal) (*model
 	d.CreatedAt = now
 	d.UpdatedAt = now
 
+	// Parse date string to time.Time for the DB date column.
+	closeDate, parseErr := time.Parse("2006-01-02", d.ExpectedCloseDate)
+	if parseErr != nil {
+		return nil, fmt.Errorf("invalid expected_close_date %q: %w", d.ExpectedCloseDate, parseErr)
+	}
+
 	created, err := scanDeal(r.db.QueryRow(ctx, q,
-		d.ID, d.OrganizationID, d.OwnerID, d.CompanyName, d.ContactName, d.ContactEmail,
-		d.ContactPhone, d.EstimatedValue, d.Currency, d.ExpectedCloseDate, d.Stage,
-		d.Status, d.Notes, d.SalesforceID, d.CreatedAt, d.UpdatedAt,
+		d.ID, d.SubmitterID, d.OrganizationID, d.CompanyName, d.ContactName, d.ContactEmail,
+		d.Vertical, d.OpportunityValueUsd, closeDate, d.CompetingVendors,
+		d.Notes, d.Status, d.CreatedAt, d.UpdatedAt,
 	))
 	if err != nil {
 		return nil, fmt.Errorf("create deal: %w", err)
@@ -201,7 +215,7 @@ func (r *DealRepository) UpdateDeal(ctx context.Context, id string, updates map[
 	args = append(args, id)
 
 	q := fmt.Sprintf(`
-		UPDATE deals SET %s WHERE id = $%d AND deleted_at IS NULL
+		UPDATE deals SET %s WHERE id = $%d
 		RETURNING %s`,
 		strings.Join(setClauses, ", "), idx, dealColumns)
 

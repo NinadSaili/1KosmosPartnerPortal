@@ -27,18 +27,17 @@ import { Select } from '@/components/ui/Select';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { useToast } from '@/components/ui/Toast';
 import { useCreateDeal } from '@/hooks/useDeals';
+import { dealApi } from '@/lib/api';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const VERTICALS = [
-  'Financial Services',
-  'Healthcare',
-  'Government',
-  'Retail',
-  'Manufacturing',
-  'Technology',
-  'Education',
-  'Energy',
+const VERTICALS: { label: string; value: string }[] = [
+  { label: 'Financial Services', value: 'financial_services' },
+  { label: 'Healthcare', value: 'healthcare' },
+  { label: 'Government', value: 'government' },
+  { label: 'Retail', value: 'retail' },
+  { label: 'Manufacturing', value: 'manufacturing' },
+  { label: 'Other', value: 'other' },
 ];
 
 const STEPS = ['Company Info', 'Opportunity', 'Review & Submit'];
@@ -169,7 +168,7 @@ function Step1({ form }: StepProps) {
       <div>
         <FieldLabel required>Vertical / Industry</FieldLabel>
         <Select {...register('vertical')} placeholder="Select a vertical">
-          {VERTICALS.map((v) => <option key={v} value={v}>{v}</option>)}
+          {VERTICALS.map((v) => <option key={v.value} value={v.value}>{v.label}</option>)}
         </Select>
         <FieldError message={errors.vertical?.message} />
       </div>
@@ -390,8 +389,10 @@ export default function NewDealPage() {
         expectedCloseDate: data.expectedCloseDate,
         competingVendors: data.competingVendors?.map((v) => v.name).filter(Boolean) ?? [],
         notes: data.notes || null,
-        status: data.submitForReview ? 'submitted' : 'draft',
       });
+      if (data.submitForReview) {
+        await dealApi.updateStatus(deal.id, 'submitted');
+      }
       success('Deal registered!', data.submitForReview ? 'Submitted for review.' : 'Saved as draft.');
       navigate(`/deals/${deal.id}`);
     } catch (err: unknown) {
