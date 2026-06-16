@@ -1,6 +1,6 @@
 // ─── Organization ────────────────────────────────────────────────────────────
 
-export type OrgTier = 'registered' | 'silver' | 'gold' | 'platinum';
+export type OrgTier = 'standard' | 'silver' | 'gold' | 'platinum';
 export type OrgStatus = 'pending' | 'active' | 'suspended';
 
 export interface Organization {

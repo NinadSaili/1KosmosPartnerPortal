@@ -19,8 +19,13 @@ package handlers
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
+	"time"
 
+	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/rs/zerolog"
 
@@ -90,7 +95,39 @@ func (h *Handler) ListOrganizations(w http.ResponseWriter, r *http.Request) {
 
 // GetOrganization handles GET /api/v1/organizations/{id}.
 func (h *Handler) GetOrganization(w http.ResponseWriter, r *http.Request) {
-	writeError(w, http.StatusNotImplemented, "not_implemented", "get organization not yet implemented")
+	id := chi.URLParam(r, "id")
+
+	type orgRow struct {
+		ID        uuid.UUID `json:"id"`
+		Name      string    `json:"name"`
+		Slug      string    `json:"slug"`
+		LogoURL   *string   `json:"logo_url"`
+		Website   *string   `json:"website"`
+		Tier      string    `json:"tier"`
+		Status    string    `json:"status"`
+		CreatedAt time.Time `json:"created_at"`
+		UpdatedAt time.Time `json:"updated_at"`
+	}
+	var org orgRow
+	err := h.pool.QueryRow(r.Context(),
+		`SELECT id, name, slug, logo_url, website, tier, status, created_at, updated_at
+		 FROM organizations WHERE id = $1`,
+		id,
+	).Scan(
+		&org.ID, &org.Name, &org.Slug, &org.LogoURL, &org.Website,
+		&org.Tier, &org.Status, &org.CreatedAt, &org.UpdatedAt,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			writeError(w, http.StatusNotFound, "not_found", "organization not found")
+			return
+		}
+		h.log.Error().Err(err).Str("org_id", id).Msg("get organization failed")
+		writeError(w, http.StatusInternalServerError, "internal_error", "failed to fetch organization")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, org)
 }
 
 // CreateOrganization handles POST /api/v1/organizations.

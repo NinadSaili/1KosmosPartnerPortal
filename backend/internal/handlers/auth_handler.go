@@ -157,10 +157,16 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Org creators become partner_admin; joining an existing org defaults to partner_user.
+	role := "partner_user"
+	if req.OrganizationName != "" {
+		role = "partner_admin"
+	}
+
 	createReq := services.CreateUserRequest{
 		Email:      req.Email,
 		FullName:   req.FullName,
-		Role:       "partner_user",
+		Role:       role,
 		SupabaseID: supabaseID,
 	}
 

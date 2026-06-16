@@ -431,6 +431,13 @@ export const aiApi = {
   },
 };
 
+// ─── Organization API ─────────────────────────────────────────────────────────
+
+export const organizationApi = {
+  get: (id: string) =>
+    axiosInstance.get<import('../types').Organization>(`/organizations/${id}`).then((r) => r.data),
+};
+
 // ─── Onboarding API ───────────────────────────────────────────────────────────
 
 export const onboardingApi = {

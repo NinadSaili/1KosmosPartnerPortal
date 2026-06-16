@@ -167,9 +167,11 @@ func (s *AuthService) UpdateUser(ctx context.Context, id string, req UpdateUserR
 		effectivePhone = req.Phone
 	}
 
-	// Profile is complete when full_name, title, and phone are all set.
-	if effectiveFullName != "" && effectiveTitle != nil && *effectiveTitle != "" &&
-		effectivePhone != nil && *effectivePhone != "" {
+	// Profile is complete once the user has supplied a full name.
+	// Title and phone are optional, so we don't gate on them.
+	_ = effectiveTitle
+	_ = effectivePhone
+	if effectiveFullName != "" {
 		updates["profile_completed"] = true
 	}
 

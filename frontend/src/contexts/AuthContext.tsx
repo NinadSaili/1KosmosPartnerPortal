@@ -6,7 +6,7 @@ import React, {
   useMemo,
   useState,
 } from 'react';
-import { authApi } from '../lib/api';
+import { authApi, organizationApi } from '../lib/api';
 import type { AuthTokens, AuthUser, User } from '../types';
 
 // ─── Token storage keys ───────────────────────────────────────────────────────
@@ -51,6 +51,21 @@ function loadTokens(): AuthTokens | null {
 function clearTokens(): void {
   localStorage.removeItem(ACCESS_TOKEN_KEY);
   localStorage.removeItem(REFRESH_TOKEN_KEY);
+}
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+async function fetchUserWithOrg(userId: string): Promise<AuthUser> {
+  const profile = await authApi.getProfile(userId);
+  if (profile.organizationId) {
+    try {
+      const org = await organizationApi.get(profile.organizationId);
+      return { ...profile, organization: org } as AuthUser;
+    } catch {
+      // org fetch failed — return profile without org
+    }
+  }
+  return profile as AuthUser;
 }
 
 // ─── Context shape ────────────────────────────────────────────────────────────
@@ -105,8 +120,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           const payload = parseJwtPayload(stored.accessToken);
           const userId = payload?.sub as string | undefined;
           if (userId) {
-            const profile = await authApi.getProfile(userId);
-            setUser(profile as AuthUser);
+            setUser(await fetchUserWithOrg(userId));
           }
           return;
         }
@@ -119,8 +133,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           const payload = parseJwtPayload(newTokens.accessToken);
           const userId = payload?.sub as string | undefined;
           if (userId) {
-            const profile = await authApi.getProfile(userId);
-            setUser(profile as AuthUser);
+            setUser(await fetchUserWithOrg(userId));
           }
           return;
         }
@@ -141,7 +154,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const result = await authApi.login({ email, password });
     storeTokens(result.tokens);
     setTokens(result.tokens);
-    setUser(result.user);
+    if (result.user.organizationId) {
+      try {
+        const org = await organizationApi.get(result.user.organizationId);
+        setUser({ ...result.user, organization: org });
+      } catch {
+        setUser(result.user);
+      }
+    } else {
+      setUser(result.user);
+    }
   }, []);
 
   const loginWithMagicLink = useCallback(async (email: string) => {
