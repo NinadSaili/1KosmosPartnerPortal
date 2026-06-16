@@ -262,7 +262,7 @@ function ProfileSection({ onComplete }: ProfileSectionProps) {
 // ─── Onboarding checklist section ─────────────────────────────────────────────
 
 interface ChecklistSectionProps {
-  organizationId: string;
+  organizationId: string | null | undefined;
   canToggle: boolean;
 }
 
@@ -272,17 +272,23 @@ function ChecklistSection({ organizationId, canToggle }: ChecklistSectionProps) 
 
   const { data: checklist, isLoading, isError } = useQuery({
     queryKey: ['onboarding', organizationId],
-    queryFn: () => onboardingApi.get(organizationId),
+    queryFn: () => onboardingApi.get(organizationId!),
+    enabled: !!organizationId,
   });
 
   const updateMutation = useMutation({
     mutationFn: (data: Partial<OnboardingChecklist>) =>
-      onboardingApi.update(organizationId, data),
+      onboardingApi.update(organizationId!, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['onboarding', organizationId] });
     },
   });
 
+  if (!organizationId) return (
+    <div className="text-center py-12 text-sm text-gray-500 dark:text-gray-400">
+      No organization found for your account. Please contact support.
+    </div>
+  );
   if (isLoading) return <LoadingSpinner className="py-12" />;
   if (isError || !checklist) return (
     <div className="text-center py-12 text-sm text-gray-500">Failed to load checklist.</div>

@@ -207,6 +207,7 @@ export const authApi = {
       email: data.email,
       password: data.password,
       fullName: data.fullName,
+      organizationName: data.organizationName,
     });
   },
   magicLink: (email: string) =>

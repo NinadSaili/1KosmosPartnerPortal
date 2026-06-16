@@ -350,10 +350,11 @@ type LoginResponse struct {
 
 // RegisterRequest is the payload for POST /api/v1/auth/register.
 type RegisterRequest struct {
-	Email          string  `json:"email"`
-	Password       string  `json:"password"`
-	FullName       string  `json:"full_name"`
-	OrganizationID *string `json:"organization_id,omitempty"`
+	Email            string  `json:"email"`
+	Password         string  `json:"password"`
+	FullName         string  `json:"full_name"`
+	OrganizationID   *string `json:"organization_id,omitempty"`
+	OrganizationName string  `json:"organization_name,omitempty"`
 }
 
 // CreateCourseRequest is the payload for POST /api/v1/courses.

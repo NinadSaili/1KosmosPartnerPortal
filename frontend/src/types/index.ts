@@ -21,7 +21,7 @@ export type UserRole = 'vendor_admin' | 'partner_admin' | 'partner_user';
 
 export interface User {
   id: string;
-  organizationId: string;
+  organizationId: string | null;
   email: string;
   fullName: string;
   avatarUrl: string | null;

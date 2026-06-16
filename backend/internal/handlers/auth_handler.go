@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -9,8 +10,10 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
 
 	"github.com/1kosmos/partner-portal/internal/middleware"
 	"github.com/1kosmos/partner-portal/internal/models"
@@ -18,6 +21,45 @@ import (
 	"github.com/1kosmos/partner-portal/internal/services"
 	"github.com/1kosmos/partner-portal/pkg/validator"
 )
+
+// generateSlug turns a human-readable name into a URL-safe slug.
+func generateSlug(name string) string {
+	var b strings.Builder
+	prevHyphen := true // skip leading hyphens
+	for _, r := range strings.ToLower(strings.TrimSpace(name)) {
+		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') {
+			b.WriteRune(r)
+			prevHyphen = false
+		} else if !prevHyphen && unicode.IsSpace(r) || unicode.IsPunct(r) || r == '_' {
+			b.WriteRune('-')
+			prevHyphen = true
+		}
+	}
+	return strings.TrimRight(b.String(), "-")
+}
+
+// createOrgFromName inserts a new organization row and returns its UUID.
+// On slug conflict it appends an 8-char UUID suffix and retries once.
+func (h *Handler) createOrgFromName(ctx context.Context, name string) (uuid.UUID, error) {
+	orgID := uuid.New()
+	slug := generateSlug(name)
+	if slug == "" {
+		slug = orgID.String()[:8]
+	}
+	_, err := h.pool.Exec(ctx,
+		`INSERT INTO organizations (id, name, slug) VALUES ($1, $2, $3)`,
+		orgID, name, slug,
+	)
+	if err != nil {
+		// Retry with a unique suffix on slug collision.
+		slug = slug + "-" + orgID.String()[:8]
+		_, err = h.pool.Exec(ctx,
+			`INSERT INTO organizations (id, name, slug) VALUES ($1, $2, $3)`,
+			orgID, name, slug,
+		)
+	}
+	return orgID, err
+}
 
 // ---------------------------------------------------------------------------
 // Helper: auth service accessor
@@ -115,19 +157,29 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Build optional org UUID.
 	createReq := services.CreateUserRequest{
 		Email:      req.Email,
 		FullName:   req.FullName,
 		Role:       "partner_user",
 		SupabaseID: supabaseID,
 	}
+
+	// Join an existing org by ID, or create a new one from the provided name.
 	if req.OrganizationID != nil && *req.OrganizationID != "" {
 		if !validator.ValidateUUID(*req.OrganizationID) {
 			writeError(w, http.StatusBadRequest, "invalid_org_id", "organization_id must be a valid UUID")
 			return
 		}
-		// parse handled inside CreateUser
+		parsed, _ := uuid.Parse(*req.OrganizationID)
+		createReq.OrganizationID = &parsed
+	} else if req.OrganizationName != "" {
+		orgID, orgErr := h.createOrgFromName(r.Context(), req.OrganizationName)
+		if orgErr != nil {
+			h.log.Error().Err(orgErr).Msg("create organization failed during registration")
+			writeError(w, http.StatusInternalServerError, "internal_error", "failed to create organization")
+			return
+		}
+		createReq.OrganizationID = &orgID
 	}
 
 	user, err := svc.CreateUser(r.Context(), createReq)

@@ -255,7 +255,7 @@ export default function AdminUsersPage() {
       header: 'Org ID',
       cell: (row) => (
         <span className="text-xs font-mono text-gray-500 dark:text-gray-400">
-          {row.organizationId.slice(0, 8)}…
+          {row.organizationId ? row.organizationId.slice(0, 8) + '…' : '—'}
         </span>
       ),
     },
